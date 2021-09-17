@@ -1,3 +1,3 @@
 # Section-Control-for-AgOpenGPS
 
-Control de section par boitier externe pour AgOpenGPS. Code assez simple prévu pour fonctionner avec des switch.
+Section control by external box for AgOpenGPS. Fairly simple code designed to work with switches.
