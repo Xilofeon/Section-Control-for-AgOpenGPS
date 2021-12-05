@@ -1,4 +1,4 @@
-    /* V1.1.4 - 05/09/2021 - Daniel Desmartins
+    /* V1.4.0 - 04/12/2021 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
     */
@@ -12,6 +12,7 @@ uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 255, 255, 255, 255, 255, 255, 25
 uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255, 255, 255, 255, 255, 255}; //Pins, Switch activation sections A5 à A0 et D1//<-
 //#define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
 //#define EEPROM_USE //comment out if not use EEPROM and AOG config machine
+//#define WORK_WITHOUT_AOG //Permet d'utiliser le boitier sans aog connecté
 
 #ifdef EEPROM_USE
 #include <EEPROM.h>
@@ -42,6 +43,9 @@ uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
 //Communication with AgOpenGPS
 int16_t temp, EEread = 0;
 
+//speed sent as *10
+float gpsSpeed = 0;
+
 //Parsing PGN
 bool isPGNFound = false, isHeaderFound = false;
 uint8_t pgn = 0, dataLength = 0;
@@ -50,7 +54,7 @@ int16_t tempHeader = 0;
 uint8_t AOG[] = {0x80,0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
 //The variables used for storage
-uint8_t relayHi=0, relayLo = 0, gpsSpeed = 0, tramline = 0, tree = 0, uTurn = 0, hydLift = 0; 
+uint8_t relayHi=0, relayLo = 0, tramline = 0, tree = 0, uTurn = 0, hydLift = 0; 
 
 uint8_t count = 0;
 uint8_t countPowerDown = 1;
@@ -110,6 +114,21 @@ void loop() {
   currentTime = millis();
   if (currentTime - lastTime >= loopTime) {  //start timed loop
     lastTime = currentTime;
+    
+    #ifdef WORK_WITHOUT_AOG
+    while (!digitalRead(ManuelSwitch)) {
+      for (count = 0; count < NUM_OF_RELAYS; count++) {
+        if (digitalRead(switchPinArray[count])) {
+          digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
+        } else {
+          digitalWrite(relayPinArray[count], relayIsActive); //Relay ON
+        }
+      }
+      if (serialResetTimer < 100) watchdogTimer = serialResetTimer = 100;
+      delay(20);
+    }
+    #endif
+    
     //avoid overflow of watchdogTimer:
     if (watchdogTimer++ > 250) watchdogTimer = 12;
     //clean out serial buffer to prevent buffer overflow:
@@ -297,8 +316,34 @@ void loop() {
       
       fieldOpen = true;
     }
+/*  else if (pgn==254) {
+      //bit 5,6
+      gpsSpeed = ((float)(Serial.read()| Serial.read() << 8 ));
+      hertz = (gpsSpeed * PULSE_BY_100M * 10) / 60 / 60;
+      
+      //bit 7,8,9
+      Serial.read();
+      Serial.read();
+      Serial.read();
+      
+      //Bit 10 Tram 
+      Serial.read();
+      
+      //Bit 11 section 1 to 8
+      Serial.read();
+      
+      //Bit 12 section 9 to 16
+      Serial.read();        
+      
+      //Bit 13 CRC
+      Serial.read();
+      
+      //reset for next pgn sentence
+      isHeaderFound = isPGNFound = false;
+      pgn=dataLength=0;      
+    }*/
     #ifdef EEPROM_USE
-    else if (pgn==238) { //EE Machine Settings         
+    else if (pgn==238) { //EE Machine Settings
       aogConfig.raiseTime = Serial.read();
       aogConfig.lowerTime = Serial.read();    
       aogConfig.enableToolLift = Serial.read();
@@ -331,7 +376,7 @@ void loop() {
   }
 } //end of main loop
 
-void switchRelaisOff(){  //that are the relais, switch all off
+void switchRelaisOff() {  //that are the relais, switch all off
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     digitalWrite(relayPinArray[count], !relayIsActive);
   }
