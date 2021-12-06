@@ -1,4 +1,4 @@
-    /* V1.4.0 - 04/12/2021 - Daniel Desmartins
+    /* V1.6.0 - 06/12/2021 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
     */
@@ -37,7 +37,7 @@ uint32_t lastTime = loopTime;
 uint32_t currentTime = loopTime;
 
 //Comm checks
-uint8_t watchdogTimer = 0;      //make sure we are talking to AOG
+uint8_t watchdogTimer = 12;      //make sure we are talking to AOG
 uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
 
 //Communication with AgOpenGPS
@@ -57,14 +57,10 @@ uint8_t AOG[] = {0x80,0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 uint8_t relayHi=0, relayLo = 0, tramline = 0, tree = 0, uTurn = 0, hydLift = 0; 
 
 uint8_t count = 0;
-uint8_t countPowerDown = 1;
-
-unsigned long lastMessageSended = 0;
 
 boolean autoModeIsOn = false;
 boolean manuelModeIsOn = false;
 boolean aogConnected = false;
-boolean fieldOpen = false;
 boolean firstConnection = true;
 boolean relayIsActive = LOW;
 
@@ -131,32 +127,28 @@ void loop() {
     
     //avoid overflow of watchdogTimer:
     if (watchdogTimer++ > 250) watchdogTimer = 12;
+    
     //clean out serial buffer to prevent buffer overflow:
-    if (serialResetTimer++ > 20) { //5s
+    if (serialResetTimer++ > 20) {
       while (Serial.available() > 0) /*uint8_t t = */Serial.read();
       serialResetTimer = 0;
-      if (aogConnected && countPowerDown > 3) {
-        countPowerDown = 0;
+    }
+
+    if ((watchdogTimer > 20)) {
+      if (aogConnected && watchdogTimer > 60) {
         aogConnected = false;
         firstConnection = true;
         #ifdef OUTPUT_LED_NORMAL
         digitalWrite(LED_BUILTIN, HIGH);
         #endif
         digitalWrite(PinAogConnected, HIGH);
-      }
-      if (countPowerDown > 12) { //1min
-        countPowerDown = 0;
-        digitalWrite(LED_BUILTIN, LOW);
-      }
-      countPowerDown++;
+      } else if (watchdogTimer > 240) digitalWrite(LED_BUILTIN, LOW);
     }
+    
     //emergency off:
     if (watchdogTimer > 10) {
-      switchRelaisOff();
-      fieldOpen = false;
-    }
-
-    if (fieldOpen) {
+       switchRelaisOff();
+    } else {
       //check Switch if Auto/Manuel:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
       if (autoModeIsOn) {
@@ -262,16 +254,15 @@ void loop() {
     pgn = Serial.read();
     dataLength = Serial.read();
     isPGNFound = true;
+    
     if (!aogConnected) {
+      watchdogTimer = 12;
       #ifdef OUTPUT_LED_NORMAL
       digitalWrite(LED_BUILTIN, LOW);
       #else
       digitalWrite(LED_BUILTIN, HIGH);
       #endif
-      digitalWrite(PinAogConnected, LOW);
     }
-    aogConnected = true;
-    countPowerDown = 0;
   }
 
   //The data package
@@ -295,7 +286,7 @@ void loop() {
       #ifdef EEPROM_USE
       if (aogConfig.isRelayActiveHigh)
       {
-        //tramline = 255 - tramline;
+        tramline = 255 - tramline;
         relayLo = 255 - relayLo;
         relayHi = 255 - relayHi;
       }
@@ -314,12 +305,15 @@ void loop() {
       isHeaderFound = isPGNFound = false;
       pgn=dataLength=0;
       
-      fieldOpen = true;
+      if (!aogConnected) {
+        digitalWrite(PinAogConnected, LOW);
+      }
+      aogConnected = true;
     }
-/*  else if (pgn==254) {
+    else if (pgn==254) {
       //bit 5,6
       gpsSpeed = ((float)(Serial.read()| Serial.read() << 8 ));
-      hertz = (gpsSpeed * PULSE_BY_100M * 10) / 60 / 60;
+//      hertz = (gpsSpeed * PULSE_BY_100M * 10) / 60 / 60;
       
       //bit 7,8,9
       Serial.read();
@@ -340,8 +334,8 @@ void loop() {
       
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
-      pgn=dataLength=0;      
-    }*/
+      pgn=dataLength=0;
+    }
     #ifdef EEPROM_USE
     else if (pgn==238) { //EE Machine Settings
       aogConfig.raiseTime = Serial.read();
