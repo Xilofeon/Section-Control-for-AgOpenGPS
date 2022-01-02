@@ -1,18 +1,19 @@
-    /* V1.6.0 - 06/12/2021 - Daniel Desmartins
+    /* V1.7.0 - 02/01/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
     */
 
-//pins:                                                                                                                           UPDATE YOUR PINS!!! //<-
-#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                                                               //<-
-uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 255, 255, 255, 255, 255, 255, 255, 255, 255};  //Pins, Relays, D2 à D8                                //<-
-#define PinAogConnected 9 //Pin AOG Conntected                                                                                                        //<- 
-#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                                                      //<-
-#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                                                                   //<-
-uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255, 255, 255, 255, 255, 255}; //Pins, Switch activation sections A5 à A0 et D1//<-
+//pins:                                                                                                                                 UPDATE YOUR PINS!!! //<-
+#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                                                                     //<-
+const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 255, 255, 255, 255, 255, 255, 255, 255, 255};  //Pins, Relays, D2 à D8                                //<-
+#define PinAogConnected 9 //Pin AOG Conntected                                                                                                              //<- 
+#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                                                            //<-
+#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                                                                         //<-
+const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255, 255, 255, 255, 255, 255}; //Pins, Switch activation sections A5 à A0 et D1//<-
 //#define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
 //#define EEPROM_USE //comment out if not use EEPROM and AOG config machine
 //#define WORK_WITHOUT_AOG //Permet d'utiliser le boitier sans aog connecté
+const uint8_t intensityLED = 100;
 
 #ifdef EEPROM_USE
 #include <EEPROM.h>
@@ -64,9 +65,7 @@ boolean aogConnected = false;
 boolean firstConnection = true;
 boolean relayIsActive = LOW;
 
-uint8_t isTbOnOff = 0;
 uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
-uint8_t lastMainByte = 0;
 //End of variables
 
 void setup() {  
@@ -147,7 +146,7 @@ void loop() {
     
     //emergency off:
     if (watchdogTimer > 10) {
-       switchRelaisOff();
+      switchRelaisOff();
     } else {
       //check Switch if Auto/Manuel:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
@@ -274,27 +273,27 @@ void loop() {
       tree = Serial.read();
       
       hydLift = Serial.read();
-      tramline = Serial.read();
+      /*tramline = */Serial.read();
       
       //just get the rest of bytes
       Serial.read();   //high,low bytes
       Serial.read();
       
-      relayLo = Serial.read();          // read relay control from AgOpenGPS
-      relayHi = Serial.read();
+      /*relayLo = */Serial.read();          // read relay control from AgOpenGPS
+      /*relayHi = */Serial.read();
 
-      #ifdef EEPROM_USE
+      /*#ifdef EEPROM_USE
       if (aogConfig.isRelayActiveHigh)
       {
         tramline = 255 - tramline;
         relayLo = 255 - relayLo;
         relayHi = 255 - relayHi;
       }
-      #endif
+      #endif*/
       
       //Bit 13 CRC
       Serial.read();
-  
+      
       //reset watchdog
       watchdogTimer = 0;
   
@@ -306,14 +305,14 @@ void loop() {
       pgn=dataLength=0;
       
       if (!aogConnected) {
-        digitalWrite(PinAogConnected, LOW);
+        analogWrite(PinAogConnected, intensityLED);
       }
       aogConnected = true;
     }
-    else if (pgn==254) {
+    else if (pgn == 254) {
       //bit 5,6
-      gpsSpeed = ((float)(Serial.read()| Serial.read() << 8 ));
-//      hertz = (gpsSpeed * PULSE_BY_100M * 10) / 60 / 60;
+      gpsSpeed = ((float)(Serial.read()| Serial.read() << 8 )); // = Vitesse * 10
+//      hertz = (gpsSpeed * PULSE_BY_100M) / 60 / 60; // = (pulsation par H) / min / s = Hertz
       
       //bit 7,8,9
       Serial.read();
@@ -321,14 +320,22 @@ void loop() {
       Serial.read();
       
       //Bit 10 Tram 
-      Serial.read();
+      tramline = Serial.read();
       
       //Bit 11 section 1 to 8
-      Serial.read();
-      
       //Bit 12 section 9 to 16
-      Serial.read();        
-      
+      relayLo = Serial.read();          // read relay control from AgOpenGPS
+      relayHi = Serial.read();
+
+      #ifdef EEPROM_USE
+      if (aogConfig.isRelayActiveHigh)
+      {
+        tramline = 255 - tramline;
+        relayLo = 255 - relayLo;
+        relayHi = 255 - relayHi;
+      }
+      #endif
+
       //Bit 13 CRC
       Serial.read();
       
