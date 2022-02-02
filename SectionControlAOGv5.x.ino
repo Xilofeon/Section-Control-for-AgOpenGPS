@@ -1,4 +1,4 @@
-    /* V1.7.2 - 14/01/2022 - Daniel Desmartins
+    /* V1.8 - 02/02/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
     */
@@ -13,6 +13,7 @@ const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255
 //#define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
 //#define EEPROM_USE //comment out if not use EEPROM and AOG config machine
 //#define WORK_WITHOUT_AOG //Permet d'utiliser le boitier sans aog connecté
+#define PULSE_BY_100M 13000
 
 #ifdef EEPROM_USE
 #include <EEPROM.h>
@@ -44,7 +45,7 @@ uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
 int16_t temp, EEread = 0;
 
 //speed sent as *10
-float gpsSpeed = 0;
+float gpsSpeed = 0, hertz = 0;
 
 //Parsing PGN
 bool isPGNFound = false, isHeaderFound = false;
@@ -272,23 +273,23 @@ void loop() {
       Serial.read();
       
       hydLift = Serial.read();
-      /*tramline = */Serial.read();
+      tramline = Serial.read();
       
       //just get the rest of bytes
       Serial.read();   //high,low bytes
       Serial.read();
       
-      /*relayLo = */Serial.read();          // read relay control from AgOpenGPS
-      /*relayHi = */Serial.read();
+      relayLo = Serial.read();          // read relay control from AgOpenGPS
+      relayHi = Serial.read();
 
-      /*#ifdef EEPROM_USE
+      #ifdef EEPROM_USE
       if (aogConfig.isRelayActiveHigh)
       {
         tramline = 255 - tramline;
         relayLo = 255 - relayLo;
         relayHi = 255 - relayHi;
       }
-      #endif*/
+      #endif
       
       //Bit 13 CRC
       Serial.read();
@@ -308,10 +309,10 @@ void loop() {
       }
       aogConnected = true;
     }
-    else if (pgn == 254) {
+    /*else if (pgn == 254) {
       //bit 5,6
       gpsSpeed = ((float)(Serial.read()| Serial.read() << 8 )); // = Vitesse * 10
-	  //hertz = (gpsSpeed * PULSE_BY_100M) / 60 / 60; // = (pulsation par H) / min / s = Hertz
+	  hertz = (gpsSpeed * PULSE_BY_100M) / 60 / 60; // = (pulsation par H) / min / s = Hertz
       
       //bit 7,8,9
       Serial.read();
@@ -341,7 +342,7 @@ void loop() {
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
       pgn=dataLength=0;
-    }
+    }*/
     #ifdef EEPROM_USE
     else if (pgn==238) { //EE Machine Settings
       aogConfig.raiseTime = Serial.read();
