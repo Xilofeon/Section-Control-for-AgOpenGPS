@@ -1,4 +1,4 @@
-    /* V1.8 - 02/02/2022 - Daniel Desmartins
+    /* V1.8.1 - 18/02/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
     */
@@ -17,7 +17,7 @@ const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255
 
 #ifdef EEPROM_USE
 #include <EEPROM.h>
-#define EEP_Ident 0x5005
+#define EEP_Ident 0x5400
 
 //Program counter reset
 void(* resetFunc) (void) = 0;
@@ -42,7 +42,7 @@ uint8_t watchdogTimer = 12;      //make sure we are talking to AOG
 uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
 
 //Communication with AgOpenGPS
-int16_t temp, EEread = 0;
+int16_t /*temp, */EEread = 0;
 
 //speed sent as *10
 float gpsSpeed = 0, hertz = 0;
@@ -281,15 +281,6 @@ void loop() {
       
       relayLo = Serial.read();          // read relay control from AgOpenGPS
       relayHi = Serial.read();
-
-      #ifdef EEPROM_USE
-      if (aogConfig.isRelayActiveHigh)
-      {
-        tramline = 255 - tramline;
-        relayLo = 255 - relayLo;
-        relayHi = 255 - relayHi;
-      }
-      #endif
       
       //Bit 13 CRC
       Serial.read();
@@ -326,15 +317,6 @@ void loop() {
       //Bit 12 section 9 to 16
       relayLo = Serial.read();          // read relay control from AgOpenGPS
       relayHi = Serial.read();
-
-      #ifdef EEPROM_USE
-      if (aogConfig.isRelayActiveHigh)
-      {
-        tramline = 255 - tramline;
-        relayLo = 255 - relayLo;
-        relayHi = 255 - relayHi;
-      }
-      #endif
 
       //Bit 13 CRC
       Serial.read();
