@@ -1,4 +1,4 @@
-    /* V1.8.1 - 18/02/2022 - Daniel Desmartins
+    /* V1.8.2 - 09/03/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
     */
@@ -24,16 +24,20 @@ void(* resetFunc) (void) = 0;
 
 //Variables for config - 0 is false
 struct Config {
-uint8_t raiseTime = 2;
-uint8_t lowerTime = 4;
-uint8_t enableToolLift = 0;
-uint8_t isRelayActiveHigh = 0; //if zero, active low (default)
+  uint8_t raiseTime = 2;
+  uint8_t lowerTime = 4;
+  uint8_t enableToolLift = 0;
+  uint8_t isRelayActiveHigh = 0; //if zero, active low (default)
 
+  uint8_t user1 = 0; //user defined values set in machine tab
+  uint8_t user2 = 0;
+  uint8_t user3 = 0;
+  uint8_t user4 = 130;
 };  Config aogConfig;   //4 bytes
 #endif
 
 //Variables:
-const byte loopTime = 100; //10hz
+const uint8_t loopTime = 100; //10hz
 uint32_t lastTime = loopTime;
 uint32_t currentTime = loopTime;
 
@@ -129,10 +133,10 @@ void loop() {
     
     //clean out serial buffer to prevent buffer overflow:
     if (serialResetTimer++ > 20) {
-      while (Serial.available() > 0) /*uint8_t t = */Serial.read();
+      while (Serial.available() > 0) Serial.read();
       serialResetTimer = 0;
     }
-
+    
     if ((watchdogTimer > 20)) {
       if (aogConnected && watchdogTimer > 60) {
         aogConnected = false;
@@ -297,8 +301,8 @@ void loop() {
       
       if (!aogConnected) {
         digitalWrite(PinAogConnected, LOW);
+        aogConnected = true;
       }
-      aogConnected = true;
     }
     /*else if (pgn == 254) {
       //bit 5,6
@@ -335,11 +339,11 @@ void loop() {
       uint8_t sett = Serial.read();  //setting0     
       if (bitRead(sett,0)) aogConfig.isRelayActiveHigh = 1; else aogConfig.isRelayActiveHigh = 0;
       
-      Serial.read();
-      Serial.read();
-      Serial.read();
-      Serial.read();    
-
+      aogConfig.user1 = Serial.read();
+      aogConfig.user2 = Serial.read();
+      aogConfig.user3 = Serial.read();
+      aogConfig.user4 = Serial.read();
+      
       //crc
       Serial.read();
   
