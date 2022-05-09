@@ -1,6 +1,6 @@
-    /* V1.8.2 - 09/03/2022 - Daniel Desmartins
+    /* V1.9 - 09/05/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
-    *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amelioration.
+    *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
 
 //pins:                                                                                                                                 UPDATE YOUR PINS!!! //<-
@@ -55,6 +55,10 @@ float gpsSpeed = 0, hertz = 0;
 bool isPGNFound = false, isHeaderFound = false;
 uint8_t pgn = 0, dataLength = 0;
 int16_t tempHeader = 0;
+
+//show life in AgIO
+uint8_t helloAgIO[] = {0x80,0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x6D };
+uint8_t helloCounter=0;
   
 uint8_t AOG[] = {0x80,0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
@@ -151,6 +155,13 @@ void loop() {
     //emergency off:
     if (watchdogTimer > 10) {
       switchRelaisOff();
+      
+      //show life in AgIO
+      if (++helloCounter > 10) {
+        Serial.write(helloAgIO,sizeof(helloAgIO));
+        Serial.flush();   // flush out buffer
+        helloCounter = 0;
+      }
     } else {
       //check Switch if Auto/Manuel:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
@@ -167,20 +178,20 @@ void loop() {
           for (count = 0; count < NUM_OF_RELAYS; count++) {
             if (!digitalRead(switchPinArray[count])) { //Signal LOW ==> switch is closed
               if (count < 8) {
-                bitWrite(offLo, count, 0);
-                bitWrite(onLo, count, 1);
+                bitClear(offLo, count);
+                bitSet(onLo, count);
               } else {
-                bitWrite(offHi, count-8, 0);
-                bitWrite(onHi, count-8, 1);
+                bitClear(offHi, count-8);
+                bitSet(onHi, count-8);
               }
               digitalWrite(relayPinArray[count], relayIsActive); //Relay ON
             } else {
               if (count < 8) {
-                bitWrite(offLo, count, 1);
-                bitWrite(onLo, count, 0);
+                bitSet(offLo, count);
+                bitClear(onLo, count);
               } else {
-                bitWrite(offHi, count-8, 1);
-                bitWrite(onHi, count-8, 0);
+                bitSet(offHi, count-8);
+                bitClear(onHi, count-8);
               }
               digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
             }
@@ -193,17 +204,17 @@ void loop() {
         for (count = 0; count < NUM_OF_RELAYS; count++) {
           if (digitalRead(switchPinArray[count])) {
             if (count < 8) {
-              bitWrite(offLo, count, 1); //Info for AOG switch OFF
+              bitSet(offLo, count); //Info for AOG switch OFF
             } else {
-              bitWrite(offHi, count-8, 1); //Info for AOG switch OFF
+              bitSet(offHi, count-8); //Info for AOG switch OFF
             }
             digitalWrite(relayPinArray[count], !relayIsActive); //Close the relay
           } else { //Signal LOW ==> switch is closed
             if (count < 8) {
-              bitWrite(offLo, count, 0);
+              bitClear(offLo, count);
               digitalWrite(relayPinArray[count], !bitRead(relayLo, count)); //Open or Close relayLo if AOG requests it in auto mode
             } else {
-              bitWrite(offHi, count-8, 0); 
+              bitClear(offHi, count-8); 
               digitalWrite(relayPinArray[count], !bitRead(relayHi, count-8)); //Open or Close  le relayHi if AOG requests it in auto mode
             }
           }
@@ -324,6 +335,9 @@ void loop() {
 
       //Bit 13 CRC
       Serial.read();
+
+      //Reset serial Watchdog
+      serialResetTimer = 0;
       
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
