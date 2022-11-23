@@ -1,4 +1,4 @@
-    /* V1.9 - 09/05/2022 - Daniel Desmartins
+    /* V1.9.1 - 23/11/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -10,7 +10,7 @@ const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 255, 255, 255, 255, 255, 2
 #define AutoSwitch 10  //Switch Mode Auto On/Off                                                                                                            //<-
 #define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                                                                         //<-
 const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255, 255, 255, 255, 255, 255}; //Pins, Switch activation sections A5 à A0 et D1//<-
-//#define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
+#define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
 //#define EEPROM_USE //comment out if not use EEPROM and AOG config machine
 //#define WORK_WITHOUT_AOG //Permet d'utiliser le boitier sans aog connecté
 #define PULSE_BY_100M 13000
@@ -24,11 +24,6 @@ void(* resetFunc) (void) = 0;
 
 //Variables for config - 0 is false
 struct Config {
-  uint8_t raiseTime = 2;
-  uint8_t lowerTime = 4;
-  uint8_t enableToolLift = 0;
-  uint8_t isRelayActiveHigh = 0; //if zero, active low (default)
-
   uint8_t user1 = 0; //user defined values set in machine tab
   uint8_t user2 = 0;
   uint8_t user3 = 0;
@@ -46,7 +41,7 @@ uint8_t watchdogTimer = 12;      //make sure we are talking to AOG
 uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
 
 //Communication with AgOpenGPS
-int16_t /*temp, */EEread = 0;
+int16_t EEread = 0;
 
 //speed sent as *10
 float gpsSpeed = 0, hertz = 0;
@@ -57,13 +52,13 @@ uint8_t pgn = 0, dataLength = 0;
 int16_t tempHeader = 0;
 
 //show life in AgIO
-uint8_t helloAgIO[] = {0x80,0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x6D };
+uint8_t helloAgIO[] = {0x80, 0x81, 0x7F, 0xED, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x74 };
 uint8_t helloCounter=0;
   
-uint8_t AOG[] = {0x80,0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
+uint8_t AOG[] = {0x80, 0x81, 0x7F, 0xED, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
 //The variables used for storage
-uint8_t relayHi=0, relayLo = 0, tramline = 0, uTurn = 0, hydLift = 0; 
+uint8_t relayHi=0, relayLo = 0; 
 
 uint8_t count = 0;
 
@@ -284,13 +279,10 @@ void loop() {
   {
     if (pgn == 239) // EF Machine Data
     {
-      uTurn = Serial.read();
       Serial.read();
-      
-      hydLift = Serial.read();
-      tramline = Serial.read();
-      
-      //just get the rest of bytes
+      Serial.read();
+      Serial.read();
+      Serial.read();
       Serial.read();   //high,low bytes
       Serial.read();
       
@@ -326,7 +318,7 @@ void loop() {
       Serial.read();
       
       //Bit 10 Tram 
-      tramline = Serial.read();
+      Serial.read();
       
       //Bit 11 section 1 to 8
       //Bit 12 section 9 to 16
@@ -345,13 +337,10 @@ void loop() {
     }*/
     #ifdef EEPROM_USE
     else if (pgn==238) { //EE Machine Settings
-      aogConfig.raiseTime = Serial.read();
-      aogConfig.lowerTime = Serial.read();    
-      aogConfig.enableToolLift = Serial.read();
-      
-      //set1 
-      uint8_t sett = Serial.read();  //setting0     
-      if (bitRead(sett,0)) aogConfig.isRelayActiveHigh = 1; else aogConfig.isRelayActiveHigh = 0;
+      Serial.read();
+      Serial.read();
+      Serial.read();
+      Serial.read();
       
       aogConfig.user1 = Serial.read();
       aogConfig.user2 = Serial.read();
@@ -367,7 +356,7 @@ void loop() {
 
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
-      pgn=dataLength=0;
+      pgn = dataLength = 0;
     }
     #endif
     else { //reset for next pgn sentence
