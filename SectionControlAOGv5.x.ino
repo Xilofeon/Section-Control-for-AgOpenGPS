@@ -1,35 +1,18 @@
-    /* V1.9.1 - 23/11/2022 - Daniel Desmartins
+    /* V2.00 - 05/12/2022 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
 
-//pins:                                                                                                                                 UPDATE YOUR PINS!!! //<-
-#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                                                                     //<-
-const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 255, 255, 255, 255, 255, 255, 255, 255, 255};  //Pins, Relays, D2 à D8                                //<-
-#define PinAogConnected 9 //Pin AOG Conntected                                                                                                              //<- 
-#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                                                            //<-
-#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                                                                         //<-
-const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 255, 255, 255, 255, 255, 255, 255, 255, 255}; //Pins, Switch activation sections A5 à A0 et D1//<-
+//pins:                                                                                    UPDATE YOUR PINS!!!    //<-
+#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                           //<-
+const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8                                   //<-
+#define PinAogConnected 9 //Pin AOG Conntected                                                                    //<- 
+#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                  //<-
+#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                               //<-
+#define WorkWithoutAogSwitch A6 //Switch for work without AOG (optional)                                          //<-
+const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12  //<-
 #define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
-//#define EEPROM_USE //comment out if not use EEPROM and AOG config machine
-//#define WORK_WITHOUT_AOG //Permet d'utiliser le boitier sans aog connecté
-#define PULSE_BY_100M 13000
-
-#ifdef EEPROM_USE
-#include <EEPROM.h>
-#define EEP_Ident 0x5400
-
-//Program counter reset
-void(* resetFunc) (void) = 0;
-
-//Variables for config - 0 is false
-struct Config {
-  uint8_t user1 = 0; //user defined values set in machine tab
-  uint8_t user2 = 0;
-  uint8_t user3 = 0;
-  uint8_t user4 = 130;
-};  Config aogConfig;   //4 bytes
-#endif
+//#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -43,9 +26,6 @@ uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
 //Communication with AgOpenGPS
 int16_t EEread = 0;
 
-//speed sent as *10
-float gpsSpeed = 0, hertz = 0;
-
 //Parsing PGN
 bool isPGNFound = false, isHeaderFound = false;
 uint8_t pgn = 0, dataLength = 0;
@@ -54,7 +34,7 @@ int16_t tempHeader = 0;
 //show life in AgIO
 uint8_t helloAgIO[] = {0x80, 0x81, 0x7F, 0xED, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x74 };
 uint8_t helloCounter=0;
-  
+
 uint8_t AOG[] = {0x80, 0x81, 0x7F, 0xED, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
 //The variables used for storage
@@ -72,20 +52,6 @@ uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 //End of variables
 
 void setup() {  
-  delay(200); //wait for IO chips to get ready
-  
-  #ifdef EEPROM_USE
-  EEPROM.get(0, EEread);              // read identifier
-    
-  if (EEread != EEP_Ident) {   // check on first start and write EEPROM
-    EEPROM.put(0, EEP_Ident);
-    EEPROM.put(6, aogConfig);
-  } else { 
-    EEPROM.get(6, aogConfig);
-  }
-  if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
-  #endif
-  
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
   }  
@@ -101,7 +67,9 @@ void setup() {
   
   digitalWrite(LED_BUILTIN, HIGH);
   digitalWrite(PinAogConnected, HIGH);
-
+  
+  delay(100); //wait for IO chips to get ready
+  
   Serial.begin(38400);  //set up communication
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
@@ -114,9 +82,9 @@ void loop() {
     lastTime = currentTime;
     
     #ifdef WORK_WITHOUT_AOG
-    while (!digitalRead(ManuelSwitch)) {
+    while (!analogRead(WorkWithoutAogSwitch)) {
       for (count = 0; count < NUM_OF_RELAYS; count++) {
-        if (digitalRead(switchPinArray[count])) {
+        if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
           digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
         } else {
           digitalWrite(relayPinArray[count], relayIsActive); //Relay ON
@@ -307,58 +275,6 @@ void loop() {
         aogConnected = true;
       }
     }
-    /*else if (pgn == 254) {
-      //bit 5,6
-      gpsSpeed = ((float)(Serial.read()| Serial.read() << 8 )); // = Vitesse * 10
-	  hertz = (gpsSpeed * PULSE_BY_100M) / 60 / 60; // = (pulsation par H) / min / s = Hertz
-      
-      //bit 7,8,9
-      Serial.read();
-      Serial.read();
-      Serial.read();
-      
-      //Bit 10 Tram 
-      Serial.read();
-      
-      //Bit 11 section 1 to 8
-      //Bit 12 section 9 to 16
-      relayLo = Serial.read();          // read relay control from AgOpenGPS
-      relayHi = Serial.read();
-
-      //Bit 13 CRC
-      Serial.read();
-
-      //Reset serial Watchdog
-      serialResetTimer = 0;
-      
-      //reset for next pgn sentence
-      isHeaderFound = isPGNFound = false;
-      pgn=dataLength=0;
-    }*/
-    #ifdef EEPROM_USE
-    else if (pgn==238) { //EE Machine Settings
-      Serial.read();
-      Serial.read();
-      Serial.read();
-      Serial.read();
-      
-      aogConfig.user1 = Serial.read();
-      aogConfig.user2 = Serial.read();
-      aogConfig.user3 = Serial.read();
-      aogConfig.user4 = Serial.read();
-      
-      //crc
-      Serial.read();
-  
-      //save in EEPROM and restart
-      EEPROM.put(6, aogConfig);
-      resetFunc();
-
-      //reset for next pgn sentence
-      isHeaderFound = isPGNFound = false;
-      pgn = dataLength = 0;
-    }
-    #endif
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
       pgn=dataLength=0;
