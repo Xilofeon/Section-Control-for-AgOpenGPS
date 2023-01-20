@@ -1,4 +1,4 @@
-    /* V2.10 - 20/01/2023 - Daniel Desmartins
+    /* V2.20 - 20/01/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -130,7 +130,7 @@ void loop() {
         manuelModeIsOn = !digitalRead(ManuelSwitch);
         if (!manuelModeIsOn) firstConnection = false;
       }
-   
+      
       if (!autoModeIsOn) {
         if(manuelModeIsOn && !firstConnection) { //Mode Manuel
           for (count = 0; count < NUM_OF_RELAYS; count++) {
@@ -154,7 +154,7 @@ void loop() {
               digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
             }
           }
-        } else {//Mode off
+        } else { //Mode off
           switchRelaisOff(); //All relays off!
         }
       } else if (!firstConnection) { //Mode Auto
