@@ -7,3 +7,5 @@ To use the box without connection to AOG you can add a switch as shown in the di
 
 # Hardware
 ![Schéma](../Pics/Schéma.png)
+
+![Schéma](../Pics/SchémaBT.png)
