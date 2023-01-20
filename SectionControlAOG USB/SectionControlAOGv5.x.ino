@@ -1,18 +1,18 @@
-    /* V2.00 - 10/12/2022 - Daniel Desmartins
+    /* V2.10 - 20/01/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
 
-//pins:                                                                                      UPDATE YOUR PINS!!!    //<-
-#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                             //<-
-const uint8_t relayPinArray[] = { 2, 3, 4, 5, 6, 7, 8 };  //Pins, Relays, D2 à D8                                   //<-
-#define PinAogConnected 9 //Pin AOG Conntected                                                                      //<- 
-#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                    //<-
-#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                                 //<-
-#define WorkWithoutAogSwitch A6 //Switch for work without AOG (optional)                                            //<-
-const uint8_t switchPinArray[] = { A5, A4, A3, A2, A1, A0, 12 }; //Pins, Switch activation sections A5 à A0 et D12  //<-
-#define OUTPUT_LED_NORMAL //comment out if use relay for switch leds On/AogConnected
+//pins:                                                                                    UPDATE YOUR PINS!!!    //<-
+#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                           //<-
+const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8                                   //<-
+#define PinAogReady 9 //Pin AOG Conntected                                                                        //<- 
+#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                  //<-
+#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                               //<-
+#define WorkWithoutAogSwitch A6 //Switch for work without AOG (optional)                                          //<-
+const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12  //<-
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
+boolean readyIsActive = HIGH;
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -35,7 +35,7 @@ uint8_t helloCounter = 0;
 uint8_t AOG[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
 //The variables used for storage
-uint8_t relayHi=0, relayLo = 0; 
+uint8_t relayHi=0, relayLo = 0;
 
 uint8_t count = 0;
 
@@ -52,7 +52,7 @@ void setup() {
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
   }  
-  pinMode(PinAogConnected, OUTPUT);
+  pinMode(PinAogReady, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND and D0/PD0/RXD
   pinMode(ManuelSwitch, INPUT_PULLUP);
@@ -63,7 +63,7 @@ void setup() {
   switchRelaisOff();
   
   digitalWrite(LED_BUILTIN, HIGH);
-  digitalWrite(PinAogConnected, HIGH);
+  digitalWrite(PinAogReady, !readyIsActive);
   
   delay(100); //wait for IO chips to get ready
   
@@ -105,10 +105,8 @@ void loop() {
       if (aogConnected && watchdogTimer > 60) {
         aogConnected = false;
         firstConnection = true;
-        #ifdef OUTPUT_LED_NORMAL
-        digitalWrite(LED_BUILTIN, HIGH);
-        #endif
-        digitalWrite(PinAogConnected, HIGH);
+        digitalWrite(LED_BUILTIN, LOW);
+        digitalWrite(PinAogReady, !readyIsActive);
       } else if (watchdogTimer > 240) digitalWrite(LED_BUILTIN, LOW);
     }
     
@@ -231,11 +229,7 @@ void loop() {
     
     if (!aogConnected) {
       watchdogTimer = 12;
-      #ifdef OUTPUT_LED_NORMAL
-      digitalWrite(LED_BUILTIN, LOW);
-      #else
       digitalWrite(LED_BUILTIN, HIGH);
-      #endif
     }
   }
 
@@ -268,7 +262,7 @@ void loop() {
       pgn=dataLength=0;
       
       if (!aogConnected) {
-        digitalWrite(PinAogConnected, LOW);
+        digitalWrite(PinAogReady, readyIsActive);
         aogConnected = true;
       }
     }
