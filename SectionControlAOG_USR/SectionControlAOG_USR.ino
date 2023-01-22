@@ -13,6 +13,7 @@ const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8
 const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12  //<-
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
 boolean readyIsActive = HIGH;
+boolean relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want 
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -42,7 +43,6 @@ boolean autoModeIsOn = false;
 boolean manuelModeIsOn = false;
 boolean aogConnected = false;
 boolean firstConnection = true;
-boolean relayIsActive = LOW;
 
 uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 //End of variables
