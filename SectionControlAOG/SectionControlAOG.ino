@@ -1,4 +1,4 @@
-    /* V2.20 - 20/01/2023 - Daniel Desmartins
+    /* V2.30 - 28/01/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -12,8 +12,8 @@ const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8
 #define WorkWithoutAogSwitch A6 //Switch for work without AOG (optional)                                          //<-
 const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12  //<-
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
-boolean readyIsActive = HIGH;
-boolean relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want 
+boolean relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want
+boolean readyIsActive = LOW;
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -29,6 +29,9 @@ bool isPGNFound = false, isHeaderFound = false;
 uint8_t pgn = 0, dataLength = 0;
 int16_t tempHeader = 0;
 
+//hello from AgIO
+uint8_t helloFromMachine[] = { 128, 129, 123, 123, 2, 1, 1, 71 };
+bool helloUDP = false;
 //show life in AgIO
 uint8_t helloAgIO[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x6D };
 uint8_t helloCounter = 0;
@@ -115,7 +118,7 @@ void loop() {
       switchRelaisOff();
       
       //show life in AgIO
-      if (++helloCounter > 10) {
+      if (++helloCounter > 10 && !helloUDP) {
         Serial.write(helloAgIO,sizeof(helloAgIO));
         Serial.flush();   // flush out buffer
         helloCounter = 0;
@@ -265,6 +268,32 @@ void loop() {
         digitalWrite(PinAogReady, readyIsActive);
         aogConnected = true;
       }
+    }
+    else if (pgn == 200) // Hello from AgIO
+    {
+      helloUDP = true;
+      
+      Serial.read(); //Version
+      Serial.read();
+      
+      if (Serial.read())
+      {
+        relayLo -= 255;
+        relayHi -= 255;
+        watchdogTimer = 0;
+      }
+	  
+      //crc
+      Serial.read();
+      
+      helloFromMachine[5] = relayLo;
+      helloFromMachine[6] = relayHi;
+      
+      Serial.write(helloFromMachine, sizeof(helloFromMachine));
+      
+      //reset for next pgn sentence
+      isHeaderFound = isPGNFound = false;
+      pgn = dataLength = 0;
     }
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
