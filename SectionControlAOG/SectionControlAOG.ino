@@ -1,4 +1,4 @@
-    /* V2.30 - 28/01/2023 - Daniel Desmartins
+    /* V2.31 - 04/02/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -30,7 +30,7 @@ uint8_t pgn = 0, dataLength = 0;
 int16_t tempHeader = 0;
 
 //hello from AgIO
-uint8_t helloFromMachine[] = { 128, 129, 123, 123, 2, 1, 1, 71 };
+uint8_t helloFromMachine[] = { 128, 129, 123, 123, 5, 0, 0, 0, 0, 0, 71 };
 bool helloUDP = false;
 //show life in AgIO
 uint8_t helloAgIO[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x6D };
@@ -119,7 +119,7 @@ void loop() {
       
       //show life in AgIO
       if (++helloCounter > 10 && !helloUDP) {
-        Serial.write(helloAgIO,sizeof(helloAgIO));
+        Serial.write(helloAgIO, sizeof(helloAgIO));
         Serial.flush();   // flush out buffer
         helloCounter = 0;
       }
