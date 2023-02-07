@@ -1,4 +1,4 @@
-    /* V2.31 - 04/02/2023 - Daniel Desmartins
+    /* V2.40 - 07/02/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -39,7 +39,7 @@ uint8_t helloCounter = 0;
 uint8_t AOG[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
 //The variables used for storage
-uint8_t relayHi=0, relayLo = 0;
+uint8_t relayLo = 0, relayHi = 0;
 
 uint8_t count = 0;
 
@@ -173,10 +173,10 @@ void loop() {
           } else { //Signal LOW ==> switch is closed
             if (count < 8) {
               bitClear(offLo, count);
-              digitalWrite(relayPinArray[count], !bitRead(relayLo, count)); //Open or Close relayLo if AOG requests it in auto mode
+              digitalWrite(relayPinArray[count], (bitRead(relayLo, count) == relayIsActive)); //Open or Close relayLo if AOG requests it in auto mode
             } else {
               bitClear(offHi, count-8); 
-              digitalWrite(relayPinArray[count], !bitRead(relayHi, count-8)); //Open or Close  le relayHi if AOG requests it in auto mode
+              digitalWrite(relayPinArray[count], (bitRead(relayHi, count - 8) == relayIsActive)); //Open or Close relayHi if AOG requests it in auto mode
             }
           }
         }
