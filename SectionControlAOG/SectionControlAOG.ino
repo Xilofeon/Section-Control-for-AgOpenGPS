@@ -1,19 +1,17 @@
-    /* V2.40 - 07/02/2023 - Daniel Desmartins
+    /* V2.50 - 07/04/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
 
-//pins:                                                                                    UPDATE YOUR PINS!!!    //<-
-#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano                                                           //<-
-const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8                                   //<-
-#define PinAogReady 9 //Pin AOG Conntected                                                                        //<- 
-#define AutoSwitch 10  //Switch Mode Auto On/Off                                                                  //<-
-#define ManuelSwitch 11 //Switch Mode Manuel On/Off                                                               //<-
-#define WorkWithoutAogSwitch A6 //Switch for work without AOG (optional)                                          //<-
-const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12  //<-
-//#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
+//pins:
+#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano
+const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8
+#define PinAogReady 9 //Pin AOG Conntected
+#define AutoSwitch 10  //Switch Mode Auto On/Off
+#define ManuelSwitch 11 //Switch Mode Manuel On/Off
+const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12};
 boolean relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want
-boolean readyIsActive = LOW;
+boolean readyIsActive = HIGH;
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -47,11 +45,13 @@ boolean autoModeIsOn = false;
 boolean manuelModeIsOn = false;
 boolean aogConnected = false;
 boolean firstConnection = true;
+boolean initWorkWithoutAog = false;
+boolean workWithoutAog = false;
 
 uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 //End of variables
 
-void setup() {  
+void setup() {
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
   }  
@@ -62,7 +62,7 @@ void setup() {
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(switchPinArray[count], INPUT_PULLUP);
   }
-
+  
   switchRelaisOff();
   
   digitalWrite(LED_BUILTIN, HIGH);
@@ -74,6 +74,16 @@ void setup() {
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
+
+  //code for whitout AOG
+  if (!digitalRead(ManuelSwitch)) {
+    initWorkWithoutAog = true;
+    for (count = 0; count < NUM_OF_RELAYS; count++) {
+      if (!digitalRead(switchPinArray[count])) {
+        initWorkWithoutAog = false;
+      }
+    }
+  }//end code for whitout AOG
 } //end of setup
 
 void loop() {
@@ -81,8 +91,25 @@ void loop() {
   if (currentTime - lastTime >= loopTime) {  //start timed loop
     lastTime = currentTime;
     
-    #ifdef WORK_WITHOUT_AOG
-    while (!analogRead(WorkWithoutAogSwitch)) {
+    //code for whitout AOG
+    if (initWorkWithoutAog) {
+      if (Serial.available() || digitalRead(ManuelSwitch)) initWorkWithoutAog = false;
+      for (count = 0; count < NUM_OF_RELAYS; count++) {
+        if (!digitalRead(switchPinArray[count])) {
+          initWorkWithoutAog = false;
+        }
+      }
+      
+      if (!(watchdogTimer % 7)) {digitalWrite(PinAogReady, !digitalRead(PinAogReady));
+      
+      if (watchdogTimer > 245) {
+        initWorkWithoutAog = false;
+        workWithoutAog = true;
+        digitalWrite(PinAogReady, readyIsActive);
+      }
+    }
+    
+    while (workWithoutAog) {
       for (count = 0; count < NUM_OF_RELAYS; count++) {
         if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
           digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
@@ -90,10 +117,9 @@ void loop() {
           digitalWrite(relayPinArray[count], relayIsActive); //Relay ON
         }
       }
-      if (serialResetTimer < 100) watchdogTimer = serialResetTimer = 100;
       delay(20);
-    }
-    #endif
+      if (Serial.available()) workWithoutAog = false;
+    }//end code for whitout AOG
     
     //avoid overflow of watchdogTimer:
     if (watchdogTimer++ > 250) watchdogTimer = 12;
