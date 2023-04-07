@@ -9,7 +9,7 @@ const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8
 #define PinAogReady 9 //Pin AOG Conntected
 #define AutoSwitch 10  //Switch Mode Auto On/Off
 #define ManuelSwitch 11 //Switch Mode Manuel On/Off
-const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12};
+const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12
 boolean relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want
 boolean readyIsActive = HIGH;
 
@@ -100,7 +100,7 @@ void loop() {
         }
       }
       
-      if (!(watchdogTimer % 7)) {digitalWrite(PinAogReady, !digitalRead(PinAogReady));
+      if (!(watchdogTimer % 7)) digitalWrite(PinAogReady, !digitalRead(PinAogReady));
       
       if (watchdogTimer > 245) {
         initWorkWithoutAog = false;
