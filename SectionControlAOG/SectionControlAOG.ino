@@ -230,7 +230,7 @@ void loop() {
       Serial.flush();   // flush out buffer
     }
   }
-
+  
   // Serial Receive
   //Do we have a match with 0x8081?    
   if (Serial.available() > 4 && !isHeaderFound && !isPGNFound) 
