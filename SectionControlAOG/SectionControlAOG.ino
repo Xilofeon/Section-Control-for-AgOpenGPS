@@ -1,16 +1,16 @@
-#define VERSION 2.51
-    /* 22/08/2023 - Daniel Desmartins
+#define VERSION 2.52
+    /* 19/11/2023 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
 
 //pins:
-#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano
-const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8};  //Pins, Relays, D2 à D8
+#define NUM_OF_RELAYS 7 //7 relays max for Arduino Nano with LED. If 8 sections are used the control LEDs are deactivated.
+const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 9};  //Pins, Relays, D2 à D9
 #define PinAogReady 9 //Pin AOG Conntected
 #define AutoSwitch 10  //Switch Mode Auto On/Off
 #define ManuelSwitch 11 //Switch Mode Manuel On/Off
-const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12}; //Pins, Switch activation sections A5 à A0 et D12
+const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 13}; //Pins, Switch activation sections A5 to A0 and D12, D13
 boolean relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want
 boolean readyIsActive = HIGH;
 
@@ -55,9 +55,11 @@ uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 void setup() {
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
-  }  
+  }
+  #if NUM_OF_RELAYS < 8
   pinMode(PinAogReady, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
+  #endif
   pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND and D0/PD0/RXD
   pinMode(ManuelSwitch, INPUT_PULLUP);
   for (count = 0; count < NUM_OF_RELAYS; count++) {
@@ -65,9 +67,11 @@ void setup() {
   }
   
   switchRelaisOff();
-  
+
+  #if NUM_OF_RELAYS < 8
   digitalWrite(LED_BUILTIN, HIGH);
   digitalWrite(PinAogReady, !readyIsActive);
+  #endif
   
   delay(100); //wait for IO chips to get ready
   
@@ -109,7 +113,9 @@ void loop() {
       if (watchdogTimer > 245) {
         initWorkWithoutAog = false;
         workWithoutAog = true;
+        #if NUM_OF_RELAYS < 8
         digitalWrite(PinAogReady, readyIsActive);
+        #endif
       }
     }
     
@@ -138,9 +144,13 @@ void loop() {
       if (aogConnected && watchdogTimer > 60) {
         aogConnected = false;
         firstConnection = true;
+        #if NUM_OF_RELAYS < 8
         digitalWrite(LED_BUILTIN, LOW);
         digitalWrite(PinAogReady, !readyIsActive);
-      } else if (watchdogTimer > 240) digitalWrite(LED_BUILTIN, LOW);
+      } else if (watchdogTimer > 240) {
+        digitalWrite(LED_BUILTIN, LOW);
+        #endif
+      }
     }
     
     //emergency off:
@@ -262,7 +272,9 @@ void loop() {
     
     if (!aogConnected) {
       watchdogTimer = 12;
+      #if NUM_OF_RELAYS < 8
       digitalWrite(LED_BUILTIN, HIGH);
+      #endif
     }
   }
 
@@ -295,7 +307,9 @@ void loop() {
       pgn=dataLength=0;
       
       if (!aogConnected) {
+        #if NUM_OF_RELAYS < 8
         digitalWrite(PinAogReady, readyIsActive);
+        #endif
         aogConnected = true;
       }
     }
