@@ -1,5 +1,5 @@
-#define VERSION 2.52
-    /* 19/11/2023 - Daniel Desmartins
+#define VERSION 2.53
+    /* 08/01/2024 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -79,6 +79,7 @@ void setup() {
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
+  Serial.println(" ");
   Serial.println("Firmware : SectionControlAOG");
   Serial.print("Version : ");
   Serial.println(VERSION);
@@ -332,8 +333,10 @@ void loop() {
       
       helloFromMachine[5] = relayLo;
       helloFromMachine[6] = relayHi;
-      
+
+      delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
       Serial.write(helloFromMachine, sizeof(helloFromMachine));
+      delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
       
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
