@@ -1,16 +1,16 @@
-#define VERSION 1.20
-/* 20/11/2023 - Daniel Desmartins
+#define VERSION 1.21
+/* 19/01/2024 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS  
  */
 
 //pins:
 #define NUM_OF_RELAYS 7
 #define PinSC_Ready 23
-#define PinAogReady 22 //Pin AOG Conntected
+#define PinAogReady 35 //Pin AOG Conntected
 const uint8_t relayPinArray[] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AutoSwitch 15  //Switch Mode Auto On/Off
 #define ManuelSwitch 2 //Switch Mode Manuel On/Off
-const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 0}; //Attention le 0 à GND le pcb ne démarre pas !
+const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 22};
 bool relayIsActive = HIGH; //Replace LOW with HIGH if your relays don't work the way you want
 bool readyIsActive = LOW;
 
