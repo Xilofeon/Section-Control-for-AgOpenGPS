@@ -1,5 +1,5 @@
-#define VERSION 1.21
-/* 19/01/2024 - Daniel Desmartins
+#define VERSION 1.22
+/* 26/03/2024 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS  
  */
 
@@ -18,8 +18,13 @@ bool readyIsActive = LOW;
 #define LED_READY 1
 #define LED_ON 138
 
+#define BT //comment to use a serial link
+#ifdef BT
 #include "BluetoothSerial.h"
 BluetoothSerial SerialBT;
+#else
+#define SerialBT Serial
+#endif BT
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -28,7 +33,7 @@ uint32_t currentTime = loopTime;
 
 //Comm checks
 uint8_t watchdogTimer = 12;      //make sure we are talking to AOG
-uint8_t serialResetTimer = 0;   //if serial buffer is getting full, empty it
+uint8_t serialResetTimer = 0;    //if serial buffer is getting full, empty it
 
 //Parsing PGN
 bool isPGNFound = false, isHeaderFound = false;
@@ -77,7 +82,7 @@ void setup() {
   ledcWrite(LED_READY, 0);
   
   delay(100); //wait for IO chips to get ready
-
+  
   Serial.begin(38400);  //set up communication
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
@@ -86,7 +91,9 @@ void setup() {
   Serial.println("Firmware : SectionControl BT");
   Serial.print("Version : ");
   Serial.println(VERSION);
+  #ifdef BT
   SerialBT.begin("SectionControl");
+  #endif
 } //end of setup
 
 void loop() {
