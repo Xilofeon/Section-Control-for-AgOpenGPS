@@ -1,5 +1,5 @@
-#define VERSION 1.22
-/* 26/03/2024 - Daniel Desmartins
+#define VERSION 1.3
+/* 29/03/2024 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS  
  */
 
@@ -59,6 +59,14 @@ bool aogConnected = false;
 bool firstConnection = true;
 
 uint8_t onLo = 0, offLo = 0, mainByte = 0;
+
+//whitout AOG
+bool lastManuelMode = false;
+bool workWithoutAog = false;
+bool initWorkWithoutAog = false;
+uint8_t countManuelMode = 0;
+uint32_t lastTimeManuelMode = loopTime;
+
 //End of variables
 
 void setup() {
@@ -100,6 +108,8 @@ void loop() {
   currentTime = millis();
   if (currentTime - lastTime >= loopTime) {  //start timed loop
     lastTime = currentTime;
+
+    whitoutAogMode();
     
     //avoid overflow of watchdogTimer:
     if (watchdogTimer++ > 250) watchdogTimer = 241;
@@ -285,4 +295,57 @@ void switchRelaisOff() {  //that are the relais, switch all off
   }
   onLo = 0;
   offLo = 0b11111111;
+}
+
+void whitoutAogMode() {
+  if (Serial.available()) {
+    initWorkWithoutAog = false;
+    countManuelMode = 0;
+    return;
+  }
+
+  manuelModeIsOn = !digitalRead(ManuelSwitch);
+  if (manuelModeIsOn == HIGH && lastManuelMode == LOW)
+  {
+    if (lastTimeManuelMode < currentTime + 5000) {
+      if (countManuelMode++ > 4) {
+        initWorkWithoutAog = true;
+        watchdogTimer = 12;
+      }
+    } else {
+      countManuelMode = 0;
+      initWorkWithoutAog = false;
+      lastTimeManuelMode = currentTime;
+    }
+  }
+  lastManuelMode = manuelModeIsOn;
+  
+  if (initWorkWithoutAog) {
+    if (!(watchdogTimer % 6)) digitalWrite(PinAogReady, !digitalRead(PinAogReady));
+    if (!(watchdogTimer % 8)) digitalWrite(PinSC_Ready, !digitalRead(PinSC_Ready));
+    
+    if (watchdogTimer > 100) {
+      initWorkWithoutAog = false;
+      workWithoutAog = true;
+      countManuelMode = 0;
+      digitalWrite(PinSC_Ready, !readyIsActive);
+      digitalWrite(PinAogReady, readyIsActive);
+    }
+  }
+  
+  while (workWithoutAog) {
+    for (count = 0; count < NUM_OF_RELAYS; count++) {
+      if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
+        digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
+      } else {
+        digitalWrite(relayPinArray[count], relayIsActive); //Relay ON
+      }
+    }
+    delay(100);
+    if (Serial.available()) {
+      workWithoutAog = false;
+      digitalWrite(PinAogReady, !readyIsActive);
+      return;
+    }
+  }
 }

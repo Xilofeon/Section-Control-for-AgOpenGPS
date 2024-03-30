@@ -35,3 +35,13 @@ Below is what you need to have in the USR configuration:
 
 wiring diagram:
 ![Schéma](../Pics/SchémaUSR.png)
+
+# Mode Whitout AOG
+
+to use the box without AOG:
+_No connection should be established
+_Switch from Manual to Off mode at least 5 times in less than 5s
+_The LEDs start flashing for approximately 10s (stay in the off position)
+_once the green LED remains fixed. you can use mode without AOG
+
+Any connection with AOG immediately deactivates this mode.
