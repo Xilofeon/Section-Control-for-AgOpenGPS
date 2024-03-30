@@ -12,7 +12,7 @@ https://a.aliexpress.com/_Ewm7fKz
 
 # Mode Whitout AOG
 
-to use the box without AOG:
+To use the box without AOG:
 _No connection should be established
 _Switch from Manual to Off mode at least 5 times in less than 5s
 _The LEDs start flashing for approximately 10s (stay in the off position)

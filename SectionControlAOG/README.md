@@ -2,13 +2,6 @@
 
 Section control by external box for AgOpenGPS. Fairly simple code designed to work with switches.
 
-To use the box without connecting to AOG:
-_You must set all the section switches to off
-_You must activate the main switch on Manual
-_Start or restart the box
-
-for a few seconds the (green) ready LED flashes. once the led is fixed you can use your box normally without AOG.
-Any error in the startup procedure or an incoming AOG connection immediately cancels this mode.
 # Hardware USB
 
 Be careful if you do not use 5V LEDs you must add a series resistor of 330ohms!
@@ -38,7 +31,7 @@ wiring diagram:
 
 # Mode Whitout AOG
 
-to use the box without AOG:
+To use the box without AOG:
 _No connection should be established
 _Switch from Manual to Off mode at least 5 times in less than 5s
 _The LEDs start flashing for approximately 10s (stay in the off position)
