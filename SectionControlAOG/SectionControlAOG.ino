@@ -1,4 +1,4 @@
-#define VERSION 2.61
+#define VERSION 2.6
     /* 30/03/2024 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
@@ -11,11 +11,8 @@ const uint8_t relayPinArray[] = {2, 3, 4, 5, 6, 7, 8, 9};  //Pins, Relays, D2 à
 #define AutoSwitch 10  //Switch Mode Auto On/Off
 #define ManuelSwitch 11 //Switch Mode Manuel On/Off
 const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 13}; //Pins, Switch activation sections A5 to A0 and D12, D13
-
-//Options:
 bool relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want
 bool readyIsActive = HIGH;
-//#define WORK_WHITOUT_AOG A6 //Uncomment to use the working method without aog thanks to a switch
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -327,10 +324,6 @@ void switchRelaisOff() {  //that are the relais, switch all off
 }
 
 void whitoutAogMode() {
-  #ifdef WORK_WHITOUT_AOG
-  while (!analogRead(WORK_WHITOUT_AOG)) {
-    digitalWrite(PinAogReady, readyIsActive);
-  #else //WORK_WHITOUT_AOG
   if (Serial.available()) {
     initWorkWithoutAog = false;
     countManuelMode = 0;
@@ -371,7 +364,6 @@ void whitoutAogMode() {
   }
   
   while (workWithoutAog) {
-  #endif //WORK_WHITOUT_AOG
     for (count = 0; count < NUM_OF_RELAYS; count++) {
       if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
         digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
@@ -385,6 +377,7 @@ void whitoutAogMode() {
       #if NUM_OF_RELAYS < 8
       digitalWrite(PinAogReady, !readyIsActive);
       #endif
+      return;
     }
   }
 }
