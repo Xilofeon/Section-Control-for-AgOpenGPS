@@ -15,7 +15,7 @@ const uint8_t switchPinArray[] = {A5, A4, A3, A2, A1, A0, 12, 13}; //Pins, Switc
 //Options:
 bool relayIsActive = LOW; //Replace LOW with HIGH if your relays don't work the way you want
 bool readyIsActive = HIGH;
-//#define WORK_WHITOUT_AOG A6 //Uncomment to use mode without aog thanks to a switch
+//#define WORK_WITHOUT_AOG A6 //Uncomment to use mode without aog thanks to a switch
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -327,10 +327,10 @@ void switchRelaisOff() {  //that are the relais, switch all off
 }
 
 void whitoutAogMode() {
-  #ifdef WORK_WHITOUT_AOG
-  while (!analogRead(WORK_WHITOUT_AOG)) {
+  #ifdef WORK_WITHOUT_AOG
+  while (!analogRead(WORK_WITHOUT_AOG)) {
     digitalWrite(PinAogReady, readyIsActive);
-  #else //WORK_WHITOUT_AOG
+  #else //WORK_WITHOUT_AOG
   if (Serial.available()) {
     initWorkWithoutAog = false;
     countManuelMode = 0;
@@ -371,7 +371,7 @@ void whitoutAogMode() {
   }
   
   while (workWithoutAog) {
-  #endif //WORK_WHITOUT_AOG
+  #endif //WORK_WITHOUT_AOG
     for (count = 0; count < NUM_OF_RELAYS; count++) {
       if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
         digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
