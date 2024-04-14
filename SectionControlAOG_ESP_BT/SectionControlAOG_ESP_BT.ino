@@ -1,17 +1,17 @@
-#define VERSION 1.32
-/*  31/03/2024 - Daniel Desmartins
- *  Connected to the Relay Port in AgOpenGPS  
+#define VERSION 1.40
+/*  14/04/2024 - Daniel Desmartins
+ *  Connected to the Relay Port in AgOpenGPS
  */
 
 //pins:
 #define NUM_OF_RELAYS 7
 #define PinSC_Ready 23
-#define PinAogReady 35 //Pin AOG Conntected
+#define PinAogReady  2 //Pin AOG Conntected
 const uint8_t relayPinArray[] = {32, 33, 25, 26, 27, 14, 12, 13};
-#define AutoSwitch 15  //Switch Mode Auto On/Off
-#define ManuelSwitch 2 //Switch Mode Manuel On/Off
+#define AutoSwitch 34   //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.
+#define ManuelSwitch 35 //Switch Mode Manuel On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.
 const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 22};
-#define PinWorkWithoutAOG 34
+//#define PinWorkWithoutAOG 15
 
 //Options:
 bool relayIsActive = HIGH; //Replace LOW with HIGH if your relays don't work the way you want
@@ -19,7 +19,8 @@ bool readyIsActive = LOW;
 
 #define LED_CONNECTED 0
 #define LED_READY 1
-#define LED_ON 138
+#define LED_RED_ON 138
+#define LED_GREEN_ON 1
 
 #define BT //comment to use a serial link
 #ifdef BT
@@ -43,13 +44,17 @@ bool isPGNFound = false, isHeaderFound = false;
 uint8_t pgn = 0, dataLength = 0;
 int16_t tempHeader = 0;
 
+//hello from AgIO
+uint8_t helloFromMachine[] = { 128, 129, 123, 123, 5, 0, 0, 0, 0, 0, 71 };
+bool helloUDP = false;
 //show life in AgIO
 uint8_t helloAgIO[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0x6D };
 uint8_t helloCounter = 0;
+
 uint8_t AOG[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
 uint8_t pwm_LED = 0;
-uint8_t LED_Increment = LED_ON/10;
+uint8_t LED_Increment = LED_RED_ON/10;
 
 //The variables used for storage
 uint8_t relayLo = 0, relayHi = 0;
@@ -76,12 +81,12 @@ void setup() {
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
   }  
-  pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND and D0/PD0/RXD
+  pinMode(AutoSwitch, INPUT_PULLUP);
   pinMode(ManuelSwitch, INPUT_PULLUP);
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(switchPinArray[count], INPUT_PULLUP);
   }
-  pinMode(PinWorkWithoutAOG, INPUT);
+  //pinMode(PinWorkWithoutAOG, INPUT);
 
   ledcSetup(LED_CONNECTED, 5000, 8);
   ledcSetup(LED_READY, 5000, 8);
@@ -138,7 +143,7 @@ void loop() {
           pwm_LED = 0;
         } else {
           pwm_LED += LED_Increment;
-          if (pwm_LED > LED_ON) pwm_LED = 0;
+          if (pwm_LED > LED_RED_ON) pwm_LED = 0;
           ledcWrite(LED_CONNECTED, pwm_LED);
         }
       }
@@ -149,7 +154,7 @@ void loop() {
       switchRelaisOff();
       
       //show life in AgIO
-      if (++helloCounter > 10) {
+      if (++helloCounter > 10 && !helloUDP) {
         SerialBT.write(helloAgIO, sizeof(helloAgIO));
         helloCounter = 0;
       }
@@ -248,7 +253,7 @@ void loop() {
     
     if (!aogConnected) {
       watchdogTimer = 12;
-      ledcWrite(LED_CONNECTED, LED_ON);
+      ledcWrite(LED_CONNECTED, LED_RED_ON);
     }
   }
   
@@ -281,10 +286,38 @@ void loop() {
       pgn=dataLength=0;
       
       if (!aogConnected) {
-        ledcWrite(LED_READY, LED_ON);
+        ledcWrite(LED_READY, LED_GREEN_ON);
         aogConnected = true;
         pwm_LED = 0;
       }
+    }
+    else if (pgn == 200) // Hello from AgIO
+    {
+      helloUDP = true;
+      
+      SerialBT.read(); //Version
+      SerialBT.read();
+      
+      if (SerialBT.read())
+      {
+        relayLo -= 255;
+        relayHi -= 255;
+        watchdogTimer = 0;
+      }
+    
+      //crc
+      SerialBT.read();
+      
+      helloFromMachine[5] = relayLo;
+      helloFromMachine[6] = relayHi;
+
+      delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
+      SerialBT.write(helloFromMachine, sizeof(helloFromMachine));
+      delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
+      
+      //reset for next pgn sentence
+      isHeaderFound = isPGNFound = false;
+      pgn = dataLength = 0;
     }
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
@@ -324,7 +357,7 @@ void whitoutAogMode() {
   }
   lastManuelMode = manuelModeIsOn;
   
-  if (initWorkWithoutAog || !digitalRead(PinWorkWithoutAOG)) {
+  if (initWorkWithoutAog/* || !digitalRead(PinWorkWithoutAOG)*/) {
     if (!(watchdogTimer % 6)) digitalWrite(PinAogReady, !digitalRead(PinAogReady));
     if (!(watchdogTimer % 8)) digitalWrite(PinSC_Ready, !digitalRead(PinSC_Ready));
     
