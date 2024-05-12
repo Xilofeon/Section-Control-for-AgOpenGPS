@@ -1,5 +1,5 @@
-#define VERSION 2.61
-   /*  30/03/2024 - Daniel Desmartins
+#define VERSION 2.62
+   /*  12/05/2024 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -88,9 +88,9 @@ void setup() {
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
-  Serial.println(" ");
-  Serial.println("Firmware : SectionControlAOG");
-  Serial.print("Version : ");
+  Serial.println(F(""));
+  Serial.println(F("Firmware : SectionControlAOG"));
+  Serial.print(F("Version : "));
   Serial.println(VERSION);
 } //end of setup
 
