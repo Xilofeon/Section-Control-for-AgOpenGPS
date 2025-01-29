@@ -1,5 +1,5 @@
-#define VERSION 1.40
-/*  14/04/2024 - Daniel Desmartins
+#define VERSION 1.41
+/*  29/01/2025 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS
  */
 
@@ -12,6 +12,7 @@ const uint8_t relayPinArray[] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define ManuelSwitch 35 //Switch Mode Manuel On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.
 const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 22};
 //#define PinWorkWithoutAOG 15
+//define NO_REMOTE_MODE
 
 //Options:
 bool relayIsActive = HIGH; //Replace LOW with HIGH if your relays don't work the way you want
@@ -158,7 +159,21 @@ void loop() {
         SerialBT.write(helloAgIO, sizeof(helloAgIO));
         helloCounter = 0;
       }
-    } else {
+    }
+    #ifdef NO_REMOTE_MODE
+    //show life in AgIO
+    if (++helloCounter > 10 && !helloUDP) {
+      SerialBT.write(helloAgIO, sizeof(helloAgIO));
+      helloCounter = 0;
+    }
+
+    for (count = 0; count < NUM_OF_RELAYS; count++) {
+      if (count < 8) {
+        digitalWrite(relayPinArray[count], (bitRead(relayLo, count) == relayIsActive)); //Open or Close relayLo by AOG
+      }
+    }
+    #else
+    else {
       //check Switch if Auto/Manuel:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
       if (autoModeIsOn) {
@@ -224,6 +239,7 @@ void loop() {
       
       SerialBT.write(AOG, sizeof(AOG));
     }
+    #endif
   }
   
   // Serial Receive
