@@ -1,5 +1,5 @@
-#define VERSION 2.62
-   /*  12/05/2024 - Daniel Desmartins
+#define VERSION 2.63
+   /*  23/11/2024 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
@@ -313,7 +313,10 @@ void loop() {
     }
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
-      pgn=dataLength=0;
+      pgn = dataLength = 0;
+      if (helloUDP) {
+        while (Serial.available()) { Serial.read(); }
+      }
     }
   }
 } //end of main loop
