@@ -1,4 +1,4 @@
-#define VERSION 1.41
+#define VERSION 1.42
 /*  29/01/2025 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS
  */
@@ -18,8 +18,6 @@ const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 22};
 bool relayIsActive = HIGH; //Replace LOW with HIGH if your relays don't work the way you want
 bool readyIsActive = LOW;
 
-#define LED_CONNECTED 0
-#define LED_READY 1
 #define LED_RED_ON 138
 #define LED_GREEN_ON 1
 
@@ -89,15 +87,13 @@ void setup() {
   }
   //pinMode(PinWorkWithoutAOG, INPUT);
 
-  ledcSetup(LED_CONNECTED, 5000, 8);
-  ledcSetup(LED_READY, 5000, 8);
-  ledcAttachPin(PinAogReady, LED_CONNECTED);
-  ledcAttachPin(PinSC_Ready, LED_READY);
+  ledcAttach(PinAogReady, 5000, 8);
+  ledcAttach(PinSC_Ready, 5000, 8);
   
   switchRelaisOff();
   
-  ledcWrite(LED_CONNECTED, 0);
-  ledcWrite(LED_READY, 0);
+  ledcWrite(PinAogReady, 0);
+  ledcWrite(PinSC_Ready, 0);
   
   delay(100); //wait for IO chips to get ready
   
@@ -135,17 +131,17 @@ void loop() {
         if (watchdogTimer > 60) {
           aogConnected = false;
           firstConnection = true;
-          ledcWrite(LED_CONNECTED, 0);
-          ledcWrite(LED_READY, 0);
+          ledcWrite(PinAogReady, 0);
+          ledcWrite(PinSC_Ready, 0);
         }
       } else {
         if (watchdogTimer > 240) {
-          ledcWrite(LED_CONNECTED, 0);
+          ledcWrite(PinAogReady, 0);
           pwm_LED = 0;
         } else {
           pwm_LED += LED_Increment;
           if (pwm_LED > LED_RED_ON) pwm_LED = 0;
-          ledcWrite(LED_CONNECTED, pwm_LED);
+          ledcWrite(PinAogReady, pwm_LED);
         }
       }
     }
@@ -269,7 +265,7 @@ void loop() {
     
     if (!aogConnected) {
       watchdogTimer = 12;
-      ledcWrite(LED_CONNECTED, LED_RED_ON);
+      ledcWrite(PinAogReady, LED_RED_ON);
     }
   }
   
@@ -302,7 +298,7 @@ void loop() {
       pgn=dataLength=0;
       
       if (!aogConnected) {
-        ledcWrite(LED_READY, LED_GREEN_ON);
+        ledcWrite(PinSC_Ready, LED_GREEN_ON);
         aogConnected = true;
         pwm_LED = 0;
       }
