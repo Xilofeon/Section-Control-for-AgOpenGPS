@@ -12,7 +12,7 @@ https://a.aliexpress.com/_Ewm7fKz
 
 Here is the connection diagram. (For the board, don't forget to add the pull-up resistors(10K to 50K) for Auto/Manual mode.)
 
-![Schema](../Pics/SchemaESP32.jpg.png)
+![Schema](../Pics/SchemaESP32.jpg)
 
 To be able to upload to the aliexpress board, you will need a TTL/USB adapter.
 
