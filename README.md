@@ -4,4 +4,4 @@ Section control by external box for AgOpenGPS. Fairly simple code designed to wo
 
 # Hardware
 
-In the directory you will find the different sets if you want a USB, Bluetooth or Ethernet connection. The code is the same for all connection modes, only the modules change.
+In the directory you will find the different sets if you want a USB, Bluetooth, Ethernet or WiFi connection. The code is the same for all connection modes, only the modules change.
