@@ -1,15 +1,15 @@
-    /* 04/04/2025 - Daniel Desmartins
+    /* 18/04/2025 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 2.70
+#define VERSION 2.80
 
 //pins:                                                                                           UPDATE YOUR PINS!!!    //<-
 #define NUM_OF_RELAYS 8 //8 relays                                                                  //<-
 #define PinWiFiConnected 23 //Pin WiFI Conntected                                                                           //<-
 #define PinAogStatus 2 //Pin AOG Conntected                                                                           //<-
 #define AutoSwitch 34  //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                        //<-
-#define ManuelSwitch 35 //Switch Mode Manuel On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
+#define ManualSwitch 35 //Switch Mode Manual On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
 #define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional)                                                 //<-
 const uint8_t relayPinArray[] = { 32, 33, 25, 26, 27, 14, 12, 13 };  //Pins for Relays                                //<-
 const uint8_t switchPinArray[] = { 4, 16, 17, 5, 18, 19, 21, 22 }; //Pins, Switch activation sections          //<-
@@ -22,11 +22,9 @@ bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the
 #define PULSE_BY_100M 13000
 
 #include <EEPROM.h>
+const uint16_t EEPROM_SIZE = 256;
 #define EEP_Ident 0x3378 
 int16_t EEread = 0;
-
-//Program counter reset
-void(* resetFunc) (void) = 0;
 
 //Variables for config - 0 is false
 struct Config {
@@ -44,10 +42,11 @@ struct Config {
 uint8_t fonction[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 bool fonctionState[] = { false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false };
 
+//WiFi
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <WiFiUdp.h>
-IPAddress myIP(0, 0, 0, 123);
+IPAddress localIP(0, 0, 0, 123);
 IPAddress udpAddress(0, 0, 0, 255);
 const int udpPort = 9999;
 const int udpLocalPort = 8888;
@@ -63,7 +62,7 @@ uint32_t currentTime = loopTime;
 uint32_t lastTimeWifiConnected = loopTime;
 
 //Comm checks
-enum { SET, NO_CONNECTED, WIFI_CONNECTED, AOG_CONNECTED, AOG_READY };
+enum { NO_CONNECTED, WIFI_CONNECTED, AOG_CONNECTED, AOG_READY };
 uint8_t statusLED = NO_CONNECTED;
 uint32_t lastTimeLED = loopTime;
 uint8_t watchdogTimer = 12;     //make sure we are talking to AOG
@@ -88,7 +87,7 @@ bool isLower = false;
 uint8_t count = 0;
 
 bool autoModeIsOn = false;
-bool manuelModeIsOn = false;
+bool manualModeIsOn = false;
 bool aogConnected = false;
 bool firstConnection = true;
 
@@ -96,16 +95,6 @@ uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 //End of variables
 
 void setup() {
-  //WiFi Setup
-  wifiMulti.addAP("ssid1", "password1"); // <-- enter your login/password
-  wifiMulti.addAP("ssid2", "password2");
-  wifiMulti.addAP("ssid3", "password3");
-  wifiMulti.addAP("ssid4", "password4");
-  
-  //WiFi.config(myIP, gateway, subnet);
-
-  currentTime = millis();
-
   //Pin Initialization
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
@@ -114,7 +103,7 @@ void setup() {
   pinMode(PinAogStatus, OUTPUT);
   pinMode(PinOutputImpuls, OUTPUT);
   pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND
-  pinMode(ManuelSwitch, INPUT_PULLUP);
+  pinMode(ManualSwitch, INPUT_PULLUP);
   pinMode(WorkWithoutAogSwitch, INPUT_PULLUP);
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(switchPinArray[count], INPUT_PULLUP);
@@ -122,30 +111,43 @@ void setup() {
   
   switchRelaisOff(); //All relays off!
   
-  setLed();
-  
-  EEPROM.get(0, EEread);              // read identifier
-  
-  if (EEread != EEP_Ident) {   // check on first start and write EEPROM
-    EEPROM.put(0, EEP_Ident);
-    EEPROM.put(6, aogConfig);
-    EEPROM.put(20, fonction);
-  } else { 
-    EEPROM.get(6, aogConfig);
-    EEPROM.get(20, fonction);
-  }
-
-  if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
-  pulseBy100m = aogConfig.user4 * 100;
-  
   Serial.begin(38400);  //set up communication
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
   Serial.println("");
+  Serial.println("");
   Serial.println("Firmware : SectionControlAOG_WiFi_UDP");
   Serial.print("Version : ");
   Serial.println(VERSION);
+  
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.get(0, EEread);              // read identifier
+
+  if (EEread != EEP_Ident) {   // check on first start and write EEPROM
+    EEPROM.put(0, EEP_Ident);
+    EEPROM.put(6, aogConfig);
+    EEPROM.put(20, fonction);
+    EEPROM.put(50, localIP);
+    EEPROM.commit();
+  } else {
+    EEPROM.get(6, aogConfig);
+    EEPROM.get(20, fonction);
+    EEPROM.get(50, localIP);
+  }
+  
+  //WiFi Setup
+  wifiMulti.addAP("ssid1", "password1"); // <-- enter your login/password
+  wifiMulti.addAP("ssid2", "password2");
+  wifiMulti.addAP("ssid3", "password3");
+  wifiMulti.addAP("ssid4", "password4");
+  WiFi.mode(WIFI_STA);
+  WiFi.config(localIP);
+  
+  if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
+  pulseBy100m = aogConfig.user4 * 100;
+
+  currentTime = millis();
 } //end of setup
 
 void loop() {
@@ -156,7 +158,7 @@ void loop() {
     #ifdef WORK_WITHOUT_AOG
     while (!analogRead(WorkWithoutAogSwitch)) {
       for (count = 0; count < NUM_OF_RELAYS; count++) {
-        if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
+        if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManualSwitch))) {
           fonctionState[count] = false; //Section OFF
         } else {
           fonctionState[count] =  true; //Section ON
@@ -185,25 +187,25 @@ void loop() {
         aogConnected = false;
         firstConnection = true;
         statusLED = AOG_CONNECTED;
-      }// else if (watchdogTimer > 240) statusLED = NO_CONNECTED;
+      }
     }
     
     //emergency off:
     if (watchdogTimer > 10) {
       switchRelaisOff(); //All relays off!
     } else {
-      //check Switch if Auto/Manuel:
+      //check Switch if Auto/Manual:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
       if (autoModeIsOn) {
         mainByte = 1;
       } else {
         mainByte = 2;
-        manuelModeIsOn = !digitalRead(ManuelSwitch);
-        if (!manuelModeIsOn) firstConnection = false;
+        manualModeIsOn = !digitalRead(ManualSwitch);
+        if (!manualModeIsOn) firstConnection = false;
       }
       
       if (!autoModeIsOn) {
-        if(manuelModeIsOn && !firstConnection) { //Mode Manuel
+        if(manualModeIsOn && !firstConnection) { //Mode Manual
           for (count = 0; count < NUM_OF_RELAYS; count++) {
             if (!digitalRead(switchPinArray[count])) { //Signal LOW ==> switch is closed
               if (count < 8) {
@@ -231,7 +233,7 @@ void loop() {
       } else if (!firstConnection) { //Mode Auto
         onLo = onHi = 0;
         for (count = 0; count < NUM_OF_RELAYS; count++) {
-          if (/*digitalRead(switchPinArray[count])*/false) {
+          if (digitalRead(switchPinArray[count])) {
             digitalWrite(relayPinArray[count], !relayIsActive); //Close the relay
             if (count < 8) {
               bitSet(offLo, count); //Info for AOG switch OFF
@@ -379,6 +381,26 @@ void loop() {
         udp.write(helloFromMachine, sizeof(helloFromMachine));
         udp.endPacket();
         udp.flush();
+
+        if (statusLED != AOG_READY) statusLED = AOG_CONNECTED;
+      }
+      else if (udpData[3] == 201)
+      {
+          //make really sure this is the subnet pgn
+          if (udpData[4] == 5 && udpData[5] == 201 && udpData[6] == 201)
+          {
+              localIP[0] = udpData[7];
+              localIP[1] = udpData[8];
+              localIP[2] = udpData[9];
+              
+              Serial.print("\r\n localIP Changed to: ");
+              Serial.println(localIP);
+
+              //save in EEPROM and restart
+              EEPROM.put(50, localIP);
+              EEPROM.commit();
+              esp_restart();
+          }
       }
       else if (udpData[3] == 202)
       {
@@ -387,8 +409,8 @@ void loop() {
         {
           //hello from AgIO
           uint8_t scanReply[] = { 128, 129, 123, 203, 7, 
-                        myIP[0], myIP[1], myIP[2], myIP[3],
-                        myIP[0], myIP[1], myIP[2], 23 };
+                        localIP[0], localIP[1], localIP[2], localIP[3],
+                        localIP[0], localIP[1], localIP[2], 23 };
           
           //checksum
           int16_t CK_A = 0;
@@ -430,7 +452,7 @@ void loop() {
         
         //save in EEPROM and restart
         EEPROM.put(6, aogConfig);
-        //resetFunc();//////////////////////////////
+        EEPROM.commit();
         
         //Reset WiFi Watchdog
         wifiResetTimer = 0;
@@ -444,6 +466,7 @@ void loop() {
 
           //save in EEPROM and restart
           EEPROM.put(20, fonction);
+          EEPROM.commit();
       }
     }
   }
@@ -477,12 +500,12 @@ void setSection() {
 void setLed() { //NO_CONNECTED, WIFI_CONNECTED, AOG_CONNECTED, AOG_READY  
   switch (statusLED) {
     case AOG_READY:
-      digitalWrite(PinWiFiConnected, LOW);
+      digitalWrite(PinWiFiConnected, HIGH);
       digitalWrite(PinAogStatus, HIGH);
       break;
 
     case AOG_CONNECTED:
-      digitalWrite(PinWiFiConnected, LOW);
+      digitalWrite(PinWiFiConnected, HIGH);
       if (currentTime - lastTimeLED >= 500) {
         lastTimeLED = currentTime;
         digitalWrite(PinAogStatus, !digitalRead(PinAogStatus));
@@ -519,16 +542,14 @@ void startWiFi() {
       Serial.println("");
       Serial.println("Wi-Fi connected");
       Serial.print("IP adress : ");
-      myIP = WiFi.localIP();
-      Serial.println(myIP);
-      udpAddress = myIP;
+      localIP = WiFi.localIP();
+      Serial.println(localIP);
+      udpAddress = localIP;
       udpAddress[3] = 255;
       udp.begin(udpLocalPort);
       statusLED = WIFI_CONNECTED;
       WiFiConnected = true;
       pinMode(25, OUTPUT); //Wifi disables this pin on startup
     }
-  } else {
-    statusLED = NO_CONNECTED;
   }
 }
