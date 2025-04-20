@@ -4,4 +4,4 @@ Section control by external box for AgOpenGPS. Fairly simple code designed to wo
 
 # Hardware
 
-In the directory you will find the different sets if you want a USB, Bluetooth, Ethernet or WiFi connection. The code is the same for all connection modes, only the modules change.
+The code uses WiFi to connect to AGIO. There are other methods BT, USB with older code which you will find in the Misc folder.

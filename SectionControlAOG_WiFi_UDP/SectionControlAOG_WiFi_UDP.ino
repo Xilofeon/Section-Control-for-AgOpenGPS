@@ -1,8 +1,8 @@
-    /* 18/04/2025 - Daniel Desmartins
+    /* 20/04/2025 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 2.80
+#define VERSION 3.00
 
 //pins:                                                                                           UPDATE YOUR PINS!!!    //<-
 #define NUM_OF_RELAYS 8 //8 relays                                                                  //<-
@@ -22,9 +22,9 @@ bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the
 #define PULSE_BY_100M 13000
 
 #include <EEPROM.h>
-const uint16_t EEPROM_SIZE = 256;
-#define EEP_Ident 0x3378 
-int16_t EEread = 0;
+const uint16_t EEPROM_SIZE = 128;
+#define EEP_Ident 0x35A9
+uint16_t EEread = 0;
 
 //Variables for config - 0 is false
 struct Config {
@@ -42,19 +42,6 @@ struct Config {
 uint8_t fonction[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 bool fonctionState[] = { false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false };
 
-//WiFi
-#include <WiFi.h>
-#include <WiFiMulti.h>
-#include <WiFiUdp.h>
-IPAddress localIP(0, 0, 0, 123);
-IPAddress udpAddress(0, 0, 0, 255);
-const int udpPort = 9999;
-const int udpLocalPort = 8888;
-bool WiFiConnected = false;
-
-WiFiUDP udp;
-WiFiMulti wifiMulti;
-
 //Variables:
 const uint8_t loopTime = 100; //10hz
 uint32_t lastTime = loopTime;
@@ -62,15 +49,13 @@ uint32_t currentTime = loopTime;
 uint32_t lastTimeWifiConnected = loopTime;
 
 //Comm checks
-enum { NO_CONNECTED, WIFI_CONNECTED, AOG_CONNECTED, AOG_READY };
-uint8_t statusLED = NO_CONNECTED;
-uint32_t lastTimeLED = loopTime;
 uint8_t watchdogTimer = 12;     //make sure we are talking to AOG
 uint8_t wifiResetTimer = 0;     //if Wifi buffer is getting full, empty it
 
 //Communication with AgOpenGPS
 uint8_t AOG[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
-char udpData[14];
+const uint8_t MaxReadBuffer = 24;  // bytes
+char udpData[MaxReadBuffer];
 
 //hello from AgIO
 uint8_t helloFromMachine[] = { 128, 129, 123, 123, 5, 0, 0, 0, 0, 0, 71 };
@@ -93,6 +78,9 @@ bool firstConnection = true;
 
 uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 //End of variables
+
+#include "LedManager.h"
+#include "WiFi_Config.h"
 
 void setup() {
   //Pin Initialization
@@ -121,36 +109,33 @@ void setup() {
   Serial.print("Version : ");
   Serial.println(VERSION);
   
-  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.begin(EEPROM_SIZE + WIFI_EEPROM_SIZE);
   EEPROM.get(0, EEread);              // read identifier
 
   if (EEread != EEP_Ident) {   // check on first start and write EEPROM
     EEPROM.put(0, EEP_Ident);
     EEPROM.put(6, aogConfig);
     EEPROM.put(20, fonction);
-    EEPROM.put(50, localIP);
+    EEPROM.put(50, myIP);
     EEPROM.commit();
   } else {
     EEPROM.get(6, aogConfig);
     EEPROM.get(20, fonction);
-    EEPROM.get(50, localIP);
+    EEPROM.get(50, myIP);
   }
-  
-  //WiFi Setup
-  wifiMulti.addAP("ssid1", "password1"); // <-- enter your login/password
-  wifiMulti.addAP("ssid2", "password2");
-  wifiMulti.addAP("ssid3", "password3");
-  wifiMulti.addAP("ssid4", "password4");
-  WiFi.mode(WIFI_STA);
-  WiFi.config(localIP);
   
   if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
   pulseBy100m = aogConfig.user4 * 100;
 
-  currentTime = millis();
+  xTaskCreate( taskLed, "LED Task", 1000, NULL, 1, NULL );
+
+  //WiFi Setup
+  setupWiFi();
 } //end of setup
 
 void loop() {
+  if (loopWiFi()) return;
+
   currentTime = millis();
   if (currentTime - lastTime >= loopTime) {  //start timed loop
     lastTime = currentTime;
@@ -168,9 +153,6 @@ void loop() {
       delay(20);
     }
     #endif
-    
-    //WiFi Run
-    startWiFi();
     
     //clean out WiFi buffer to prevent buffer overflow:
     if (wifiResetTimer++ > 20) {
@@ -329,13 +311,11 @@ void loop() {
 
     //set sections
     setSection();
-    //set LEDs
-    setLed();
   }
   
   //UDP Receive
   udp.parsePacket();   // Size of packet to receive
-  if (udp.read(udpData, 14)) {
+  if (udp.read(udpData, MaxReadBuffer)) {
     if (udpData[0] == 0x80 && udpData[1] == 0x81 && udpData[2] == 0x7F) //Data
     {
       if (udpData[3] == 239)  //machine data
@@ -389,15 +369,15 @@ void loop() {
           //make really sure this is the subnet pgn
           if (udpData[4] == 5 && udpData[5] == 201 && udpData[6] == 201)
           {
-              localIP[0] = udpData[7];
-              localIP[1] = udpData[8];
-              localIP[2] = udpData[9];
+              myIP[0] = udpData[7];
+              myIP[1] = udpData[8];
+              myIP[2] = udpData[9];
               
-              Serial.print("\r\n localIP Changed to: ");
-              Serial.println(localIP);
+              Serial.print("\r\n myIP Changed to: ");
+              Serial.println(myIP);
 
               //save in EEPROM and restart
-              EEPROM.put(50, localIP);
+              EEPROM.put(50, myIP);
               EEPROM.commit();
               esp_restart();
           }
@@ -409,8 +389,8 @@ void loop() {
         {
           //hello from AgIO
           uint8_t scanReply[] = { 128, 129, 123, 203, 7, 
-                        localIP[0], localIP[1], localIP[2], localIP[3],
-                        localIP[0], localIP[1], localIP[2], 23 };
+                        myIP[0], myIP[1], myIP[2], myIP[3],
+                        myIP[0], myIP[1], myIP[2], 23 };
           
           //checksum
           int16_t CK_A = 0;
@@ -493,63 +473,5 @@ void setSection() {
   
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     digitalWrite(relayPinArray[count], (fonctionState[fonction[count] - 1] == relayIsActive));
-  }
-}
-
-
-void setLed() { //NO_CONNECTED, WIFI_CONNECTED, AOG_CONNECTED, AOG_READY  
-  switch (statusLED) {
-    case AOG_READY:
-      digitalWrite(PinWiFiConnected, HIGH);
-      digitalWrite(PinAogStatus, HIGH);
-      break;
-
-    case AOG_CONNECTED:
-      digitalWrite(PinWiFiConnected, HIGH);
-      if (currentTime - lastTimeLED >= 500) {
-        lastTimeLED = currentTime;
-        digitalWrite(PinAogStatus, !digitalRead(PinAogStatus));
-      }
-      break;
-
-    case WIFI_CONNECTED:
-      digitalWrite(PinWiFiConnected, HIGH);
-      digitalWrite(PinAogStatus, LOW);
-      break;
-
-    case NO_CONNECTED:
-    //case default:
-      if (currentTime - lastTimeLED >= 500) {
-        lastTimeLED = currentTime;
-        digitalWrite(PinWiFiConnected, !digitalRead(PinWiFiConnected));
-      }
-      digitalWrite(PinAogStatus, LOW);
-      break;
-  }
-}
-
-void startWiFi() {
-  if ((WiFi.status() != WL_CONNECTED) && (currentTime - lastTimeWifiConnected >= 10000)) {
-    lastTimeWifiConnected = currentTime;
-
-    if (WiFiConnected) esp_restart();
-    
-    Serial.println("");
-    Serial.println("WiFi connection...");
-
-    if (wifiMulti.run() == WL_CONNECTED)
-    {
-      Serial.println("");
-      Serial.println("Wi-Fi connected");
-      Serial.print("IP adress : ");
-      localIP = WiFi.localIP();
-      Serial.println(localIP);
-      udpAddress = localIP;
-      udpAddress[3] = 255;
-      udp.begin(udpLocalPort);
-      statusLED = WIFI_CONNECTED;
-      WiFiConnected = true;
-      pinMode(25, OUTPUT); //Wifi disables this pin on startup
-    }
   }
 }
