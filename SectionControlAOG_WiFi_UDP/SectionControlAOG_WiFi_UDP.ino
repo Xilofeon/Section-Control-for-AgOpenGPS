@@ -22,8 +22,8 @@ bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the
 #define PULSE_BY_100M 13000
 
 #include <EEPROM.h>
-const uint16_t EEPROM_SIZE = 128;
-#define EEP_Ident 0x35A9
+const uint16_t EEPROM_SIZE = 64;
+#define EEP_Ident 0x35A2
 uint16_t EEread = 0;
 
 //Variables for config - 0 is false
@@ -119,9 +119,11 @@ void setup() {
     EEPROM.put(26, myIP);
     EEPROM.commit();
   } else {
-    EEPROM.get(6, aogConfig);
-    EEPROM.get(20, fonction);
-    EEPROM.get(50, myIP);
+    EEPROM.get(2, aogConfig);
+    EEPROM.get(10, function);
+    IPAddress tmpIP;
+    EEPROM.get(26, tmpIP);
+    myIP = tmpIP;
   }
   
   if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
@@ -377,7 +379,7 @@ void loop() {
               Serial.println(myIP);
 
               //save in EEPROM and restart
-              EEPROM.put(50, myIP);
+              EEPROM.put(26, myIP);
               EEPROM.commit();
               esp_restart();
           }
@@ -431,7 +433,7 @@ void loop() {
         aogConfig.user4 = udpData[12];
         
         //save in EEPROM and restart
-        EEPROM.put(6, aogConfig);
+        EEPROM.put(2, aogConfig);
         EEPROM.commit();
         
         //Reset WiFi Watchdog
@@ -445,7 +447,7 @@ void loop() {
           }
 
           //save in EEPROM and restart
-          EEPROM.put(20, fonction);
+          EEPROM.put(10, function);
           EEPROM.commit();
       }
     }
