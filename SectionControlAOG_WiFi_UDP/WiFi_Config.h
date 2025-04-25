@@ -33,6 +33,16 @@ unsigned long lastWiFiCheck = 0;
 const unsigned long wifiCheckInterval = 1000;
 unsigned long wifiDisconnectedSince = 0;
 
+// Helper function to escape special characters for HTML output
+String escapeHTML(String text) {
+  text.replace("&", "&amp;");
+  text.replace("<", "&lt;");
+  text.replace(">", "&gt;");
+  text.replace("\"", "&quot;");
+  text.replace("'", "&#039;");
+  return text;
+}
+
 void loadNetworks(WiFiNetwork networks[], uint8_t& count) {
   uint16_t ident = 0;
   EEPROM.get(WIFI_EEPROM_START, ident);
@@ -69,10 +79,19 @@ void saveNetworks(WiFiNetwork networks[], uint8_t count) {
 
 void clearNetworks() {
   EEPROM.put(WIFI_EEPROM_START, (uint16_t)0);
+  int addr = WIFI_EEPROM_START + WIFI_EEPROM_HEADER;
+  for (uint8_t i = 0; i < MAX_SSID; i++) {
+    WiFiNetwork empty = { "", "" };
+    EEPROM.put(addr, empty);
+    addr += sizeof(WiFiNetwork);
+  }
+
   EEPROM.commit();
 }
 
 void initWebConfig() {
+  // Start AP and captive DNS
+  WiFi.mode(WIFI_AP);
   WiFi.softAP("Section Control WiFi Config");
   IPAddress ip = WiFi.softAPIP();
   dnsServer.start(53, "*", ip);
@@ -82,31 +101,169 @@ void initWebConfig() {
 
   server.on("/", HTTP_GET, []() {
     pageVisited = true;
+    
+    // Scan for available networks
+    uint8_t n = WiFi.scanNetworks();
+    // Load any previously saved networks
     WiFiNetwork networks[MAX_SSID];
-    uint8_t count = 0;
-    loadNetworks(networks, count);
+    uint8_t savedCount = 0;
+    loadNetworks(networks, savedCount);
 
-    String page = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>";
-    page += "<title>Config WiFi</title><style>body{font-family:sans-serif;max-width:600px;margin:auto;padding:20px;}input,select{width:100%;margin-bottom:10px;padding:8px;}button{padding:10px;margin-top:10px;width:100%;}</style>";
-    page += "<script>function setFields(){const n=document.getElementById('nb').value;for(let i=0;i<5;i++){document.getElementById('row'+i).style.display=(i<n)?'block':'none';}}</script>";
-    page += "</head><body><h2>WiFi Configuration</h2><form method='POST' action='/save'>";
-    page += "<label>Number of networks :</label><select name='count' id='nb' onchange='setFields()'>";
+    // If reset, ensure at least one slot and clear all network entries
+    if (savedCount == 0) {
+      savedCount = 1;
+      for (int i = 0; i < MAX_SSID; i++) {
+        networks[i].ssid[0] = '\0';
+        networks[i].pass[0] = '\0';
+      }
+    }
+
+    // Build HTML
+    String html = R"rawliteral(
+      <!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>WiFi Configuration</title>
+      <style>
+        body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+        input, select, button { width: 100%; padding: 8px; margin: 6px 0; }
+        .net { border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin: 8px 0; position: relative; }
+        ul { list-style: none; padding: 0; }
+        .btn-save { background: #28a745; color: white; }
+        .slot-select { 
+          width: auto; 
+          min-width: 120px;
+          position: absolute; 
+          top: 10px; 
+          right: 10px; 
+          z-index: 100;
+          background-color: white;
+          border: 1px solid #007bff;
+        }
+      </style>
+      <script>
+        const MAX_SSID = )rawliteral" + String(MAX_SSID) + R"rawliteral(;
+        let savedCount = )rawliteral" + String(savedCount) + R"rawliteral(;
+
+        function updateNetworkFields(count) {
+          for (let i = 0; i < MAX_SSID; i++) {
+            document.getElementById('row' + i).style.display = i < count ? 'block' : 'none';
+          }
+          savedCount = count;
+        }
+
+        function chooseNetworkSlot(ssid, container) {
+          // Remove any existing selector
+          const old = document.querySelector('.slot-select');
+          if (old) old.remove();
+        
+          // Build dropdown
+          let select = document.createElement('select');
+          select.className = 'slot-select';
+          select.autofocus = true;
+          
+          // Add Cancel option first
+          select.add(new Option('Cancel', -1));
+          
+          // Then add the slots
+          for (let i = 0; i < savedCount; i++) {
+            select.add(new Option('Slot ' + (i+1), i));
+          }
+        
+          // Set Cancel as the default selected option
+          select.selectedIndex = 0;
+        
+          // Handle selection
+          select.addEventListener('change', function() {
+            const idx = parseInt(this.value);
+            if (idx >= 0 && idx < MAX_SSID) {
+              document.getElementById("ssid" + idx).value = ssid;
+              document.getElementById("pass" + idx).value = "";
+              document.getElementById("pass" + idx).focus();
+            }
+            this.remove();
+          });
+          
+          // Add to container and open immediately
+          container.appendChild(select);
+          select.focus();
+          
+          // Try multiple methods to open the dropdown
+          try {
+            // Try the click method
+            select.click();
+            
+            // Alternative method for some browsers
+            var event = new MouseEvent('mousedown', {
+              view: window,
+              bubbles: true,
+              cancelable: true
+            });
+            select.dispatchEvent(event);
+          } catch(e) {
+            console.log("Could not auto-open dropdown:", e);
+          }
+        }
+        
+        window.onload = function() {
+          document.getElementById('nb').addEventListener('change', function() {
+            updateNetworkFields(parseInt(this.value));
+          });
+        };
+      </script>
+      </head><body>
+      <h2>WiFi Configuration</h2>
+      <form method="POST" action="/save">
+        <label>Number of networks:</label>
+        <select name="count" id="nb">)rawliteral";
+
+    // Options for number of networks
     for (int i = 1; i <= MAX_SSID; i++) {
-      page += "<option value='" + String(i) + "'" + (i == count ? " selected" : "") + ">" + String(i) + "</option>";
+      html += "<option value='" + String(i) + "'" + (i == savedCount ? " selected" : "") + ">"
+              + String(i) + "</option>";
     }
-    page += "</select>";
+    
+    html += R"rawliteral(
+        </select>)rawliteral";
 
+    // Input fields for each slot - Escape special characters in saved values
     for (int i = 0; i < MAX_SSID; i++) {
-      String ssid = (i < count) ? networks[i].ssid : "";
-      String pass = (i < count) ? networks[i].pass : "";
-      page += "<div id='row" + String(i) + "' style='display:" + (i < count ? "block" : "none") + ";'>";
-      page += "SSID " + String(i + 1) + ": <input name='ssid" + String(i) + "' value='" + ssid + "'>";
-      page += "Password: <input name='pass" + String(i) + "' value='" + pass + "' type='password'></div>";
+      html += "<div id='row" + String(i) + "' style='display:" + ((i < savedCount) ? "block" : "none") + ";'>";
+      html += "SSID " + String(i+1) + ": <input id='ssid" + String(i) + "' name='ssid" + String(i) +
+              "' value='" + escapeHTML(String(networks[i].ssid)) + "'>";
+      html += "Password: <input id='pass" + String(i) + "' name='pass" + String(i) +
+              "' type='password' value='" + escapeHTML(String(networks[i].pass)) + "'></div>";
     }
-    page += "<button type='submit'>Save</button></form>";
-    page += "<form action='/reset' method='POST'><button style='background:#c00;color:#fff;' type='submit'>Reset WiFi</button></form>";
-    page += "</body><script>setFields();</script></html>";
-    server.send(200, "text/html", page);
+    
+    html += R"rawliteral(
+        <button type="submit" class="btn-save">Save</button>
+      </form>
+      <form method="POST" action="/reset">
+        <button style="background:#dc3545; color:#fff;" type="submit">Reset WiFi</button>
+      </form>
+      <hr>
+      <h3>Available Networks</h3>
+      <ul>)rawliteral";
+
+    // List scanned networks - Escape special characters in SSIDs
+    for (int i = 0; i < n; i++) {
+      String ssid = WiFi.SSID(i);
+      String escapedSSID = escapeHTML(ssid);
+      int rssi = WiFi.RSSI(i);
+      html += "<li class='net'>";
+      html += "<strong>" + escapedSSID + "</strong> (" + String(rssi) + " dBm)";
+      html += "<br><button onclick=\"chooseNetworkSlot('" + escapedSSID + "', this.parentNode)\">"
+              "Select Network</button></li>";
+    }
+    if (n == 0) {
+      html += "<li>No networks found.</li>";
+    }
+
+    html += R"rawliteral(
+      </ul>
+      </body></html>)rawliteral";
+
+    server.send(200, "text/html", html);
   });
 
   server.on("/save", HTTP_POST, []() {
@@ -114,12 +271,21 @@ void initWebConfig() {
     
     if (server.hasArg("count")) {
       configuredNetworks = server.arg("count").toInt();
+      if (configuredNetworks == 0) configuredNetworks = 1;
       if (configuredNetworks > MAX_SSID) configuredNetworks = MAX_SSID;
     }
     
     for (uint8_t i = 0; i < configuredNetworks; i++) {
       String s = server.arg("ssid" + String(i));
       String p = server.arg("pass" + String(i));
+      
+      if (s.length() >= sizeof(networks[i].ssid)) {
+        s = s.substring(0, sizeof(networks[i].ssid) - 1);
+      }
+      if (p.length() >= sizeof(networks[i].pass)) {
+        p = p.substring(0, sizeof(networks[i].pass) - 1);
+      }
+      
       s.toCharArray(networks[i].ssid, sizeof(networks[i].ssid));
       p.toCharArray(networks[i].pass, sizeof(networks[i].pass));
     }
@@ -129,14 +295,14 @@ void initWebConfig() {
     delay(1500);
     ESP.restart();
   });
-
+  
   server.on("/reset", HTTP_POST, []() {
     clearNetworks();
     server.send(200, "text/html", "<html><body><h2>WiFi reset. Rebooting...</h2></body></html>");
     delay(1500);
     ESP.restart();
   });
-
+  
   server.onNotFound([]() {
     server.sendHeader("Location", "/", true);
     server.send(200, "text/html", "<html><head><meta http-equiv='refresh' content='0; url=/'></head><body>Redirection...</body></html>");
