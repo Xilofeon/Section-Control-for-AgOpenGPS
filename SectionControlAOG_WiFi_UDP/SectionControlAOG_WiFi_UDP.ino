@@ -4,21 +4,21 @@
     */
 #define VERSION 3.00
 
-//pins:                                                                                           UPDATE YOUR PINS!!!    //<-
-#define NUM_OF_RELAYS 8 //8 relays                                                                  //<-
-#define PinWiFiConnected 23 //Pin WiFI Conntected                                                                           //<-
-#define PinAogStatus 2 //Pin AOG Conntected                                                                           //<-
+//pins:
+#define NUM_OF_RELAYS 8 //8 relays
+#define PinWiFiConnected 23 //Pin WiFI Conntected
+#define PinAogStatus 2 //Pin AOG Conntected
 #define AutoSwitch 34  //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                        //<-
 #define ManualSwitch 35 //Switch Mode Manual On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
-#define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional)                                                 //<-
-const uint8_t relayPinArray[] = { 32, 33, 25, 26, 27, 14, 12, 13 };  //Pins for Relays                                //<-
-const uint8_t switchPinArray[] = { 4, 16, 17, 5, 18, 19, 21, 22 }; //Pins, Switch activation sections          //<-
+#define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional)
+const uint8_t relayPinArray[] = { 32, 33, 25, 26, 27, 14, 12, 13 };  //Pins for Relays
+const uint8_t switchPinArray[] = { 4, 16, 17, 5, 18, 19, 21, 22 }; //Pins, Switch activation sections
 
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
 bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
 
 //Variable for speed:
-#define PinOutputImpuls 15                                                                                                                                 //<-
+#define PinOutputImpuls 15
 #define PULSE_BY_100M 13000
 
 #include <EEPROM.h>
@@ -37,10 +37,10 @@ struct Config {
   uint8_t user2 = 0;
   uint8_t user3 = 0;
   uint8_t user4 = 130;
-};  Config aogConfig;   //4 bytes
+}; Config aogConfig;   //4 bytes
 
-uint8_t fonction[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-bool fonctionState[] = { false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false };
+uint8_t function[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+bool functionState[] = { false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false };
 
 //Variables:
 const uint8_t loopTime = 100; //10hz
@@ -114,9 +114,9 @@ void setup() {
 
   if (EEread != EEP_Ident) {   // check on first start and write EEPROM
     EEPROM.put(0, EEP_Ident);
-    EEPROM.put(6, aogConfig);
-    EEPROM.put(20, fonction);
-    EEPROM.put(50, myIP);
+    EEPROM.put(2, aogConfig);
+    EEPROM.put(10, function);
+    EEPROM.put(26, myIP);
     EEPROM.commit();
   } else {
     EEPROM.get(6, aogConfig);
@@ -144,9 +144,9 @@ void loop() {
     while (!analogRead(WorkWithoutAogSwitch)) {
       for (count = 0; count < NUM_OF_RELAYS; count++) {
         if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManualSwitch))) {
-          fonctionState[count] = false; //Section OFF
+          functionState[count] = false; //Section OFF
         } else {
-          fonctionState[count] =  true; //Section ON
+          functionState[count] =  true; //Section ON
         }
       }
       if (serialResetTimer < 100) watchdogTimer = serialResetTimer = 100;
@@ -197,7 +197,7 @@ void loop() {
                 bitClear(offHi, count-8);
                 bitSet(onHi, count-8);
               }
-              fonctionState[count] =  true; //Section ON
+              functionState[count] =  true; //Section ON
             } else {
               if (count < 8) {
                 bitSet(offLo, count);
@@ -206,7 +206,7 @@ void loop() {
                 bitSet(offHi, count-8);
                 bitClear(onHi, count-8);
               }
-              fonctionState[count] = false; //Section OFF
+              functionState[count] = false; //Section OFF
             }
           }
         } else { //Mode off
@@ -216,19 +216,19 @@ void loop() {
         onLo = onHi = 0;
         for (count = 0; count < NUM_OF_RELAYS; count++) {
           if (digitalRead(switchPinArray[count])) {
-            digitalWrite(relayPinArray[count], !relayIsActive); //Close the relay
             if (count < 8) {
               bitSet(offLo, count); //Info for AOG switch OFF
             } else {
               bitSet(offHi, count-8); //Info for AOG switch OFF
             }
+            functionState[count] = false; //Close the section
           } else { //Signal LOW ==> switch is closed
             if (count < 8) {
               bitClear(offLo, count);
-              fonctionState[count] = bitRead(sectionLo, count); //Open or Close sectionLo if AOG requests it in auto mode
+              functionState[count] = bitRead(sectionLo, count); //Open or Close sectionLo if AOG requests it in auto mode
             } else {
               bitClear(offHi, count - 8);
-              fonctionState[count] = bitRead(sectionHi, count-8); //Open or Close  le sectionHi if AOG requests it in auto mode
+              functionState[count] = bitRead(sectionHi, count-8); //Open or Close  le sectionHi if AOG requests it in auto mode
             }
           }
         }
@@ -441,7 +441,7 @@ void loop() {
       {
           for (uint8_t i = 0; i < 16; i++)
           {
-              fonction[i] = udpData[i + 5];
+              function[i] = udpData[i + 5];
           }
 
           //save in EEPROM and restart
@@ -454,24 +454,24 @@ void loop() {
 
 void switchRelaisOff() {  //that are the relais, switch all off
   for (count = 0; count < NUM_OF_RELAYS; count++) {
-    fonctionState[count] = false;
+    functionState[count] = false;
   }
   onLo = onHi = 0;
   offLo = offHi = 0b11111111;
 }
 
 void setSection() {
-  fonctionState[16] = isLower;
-  fonctionState[17] = isRaise;
+  functionState[16] = isLower;
+  functionState[17] = isRaise;
   
   //Tram
-  fonctionState[18] = bitRead(tramline, 0); //right
-  fonctionState[19] = bitRead(tramline, 1); //left
+  functionState[18] = bitRead(tramline, 0); //right
+  functionState[19] = bitRead(tramline, 1); //left
   
   //GeoStop
-  fonctionState[20] =  geoStop;
+  functionState[20] =  geoStop;
   
   for (count = 0; count < NUM_OF_RELAYS; count++) {
-    digitalWrite(relayPinArray[count], (fonctionState[fonction[count] - 1] == relayIsActive));
+    digitalWrite(relayPinArray[count], (functionState[function[count] - 1] == relayIsActive));
   }
 }
