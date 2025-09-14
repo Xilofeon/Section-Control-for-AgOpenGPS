@@ -1,8 +1,8 @@
-    /* 25/04/2025 - Daniel Desmartins
+    /* 14/09/2025 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.10
+#define VERSION 3.11
 
 //pins:
 #define NUM_OF_RELAYS 8 //8 relays
@@ -10,11 +10,11 @@
 #define PinAogStatus 2 //Pin AOG Conntected
 #define AutoSwitch 34  //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                        //<-
 #define ManualSwitch 35 //Switch Mode Manual On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
-#define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional)
+#define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 const uint8_t relayPinArray[] = { 32, 33, 25, 26, 27, 14, 12, 13 };  //Pins for Relays
 const uint8_t switchPinArray[] = { 4, 16, 17, 5, 18, 19, 21, 22 }; //Pins, Switch activation sections
 
-//#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional)
+//#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
 
 //Variable for speed:
@@ -36,7 +36,7 @@ struct Config {
   uint8_t user1 = 0; //user defined values set in machine tab
   uint8_t user2 = 0;
   uint8_t user3 = 0;
-  uint8_t user4 = 130;
+  uint8_t user4 = 0;
 }; Config aogConfig;   //4 bytes
 
 uint8_t function[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
@@ -103,8 +103,8 @@ void setup() {
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
-  Serial.println("");
-  Serial.println("");
+  Serial.println("\r\n.");
+  Serial.println(".\r\n");
   Serial.println("Firmware : SectionControlAOG_WiFi_UDP");
   Serial.print("Version : ");
   Serial.println(VERSION);
@@ -127,9 +127,22 @@ void setup() {
   }
   
   if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
-  pulseBy100m = aogConfig.user4 * 100;
 
   xTaskCreate( taskLed, "LED Task", 1000, NULL, 1, NULL );
+
+  #ifdef WORK_WITHOUT_AOG
+  delay(5000);
+  while (!analogRead(WorkWithoutAogSwitch)) {
+    for (count = 0; count < NUM_OF_RELAYS; count++) {
+      if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManualSwitch))) {
+        functionState[count] = false; //Section OFF
+      } else {
+        functionState[count] =  true; //Section ON
+      }
+    }
+    delay(120);
+  }
+  #endif
 
   //WiFi Setup
   setupWiFi();
@@ -141,20 +154,6 @@ void loop() {
   currentTime = millis();
   if (currentTime - lastTime >= loopTime) {  //start timed loop
     lastTime = currentTime;
-    
-    #ifdef WORK_WITHOUT_AOG
-    while (!analogRead(WorkWithoutAogSwitch)) {
-      for (count = 0; count < NUM_OF_RELAYS; count++) {
-        if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManualSwitch))) {
-          functionState[count] = false; //Section OFF
-        } else {
-          functionState[count] =  true; //Section ON
-        }
-      }
-      if (serialResetTimer < 100) watchdogTimer = serialResetTimer = 100;
-      delay(20);
-    }
-    #endif
     
     //clean out WiFi buffer to prevent buffer overflow:
     if (wifiResetTimer++ > 20) {
