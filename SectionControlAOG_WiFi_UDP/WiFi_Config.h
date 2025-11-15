@@ -376,8 +376,10 @@ bool loopWiFi() {
     } else {
       if (wifiDisconnectedSince == 0) {
         wifiDisconnectedSince = millis();
-      } else if (millis() - wifiDisconnectedSince > 60000) {
+      } else if (millis() - wifiDisconnectedSince > 30000) {
         ESP.restart();
+      } else {
+        statusLED = NO_CONNECTED;
       }
     }
   }

@@ -1,8 +1,8 @@
-    /* 14/09/2025 - Daniel Desmartins
+    /* 13/11/2025 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.11
+#define VERSION 3.20
 
 //pins:
 #define NUM_OF_RELAYS 8 //8 relays
@@ -17,13 +17,9 @@ const uint8_t switchPinArray[] = { 4, 16, 17, 5, 18, 19, 21, 22 }; //Pins, Switc
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
 
-//Variable for speed:
-#define PinOutputImpuls 15
-#define PULSE_BY_100M 13000
-
 #include <EEPROM.h>
 const uint16_t EEPROM_SIZE = 64;
-#define EEP_Ident 0x35A2
+#define EEP_Ident 0x35A3
 uint16_t EEread = 0;
 
 //Variables for config - 0 is false
@@ -60,10 +56,6 @@ char udpData[MaxReadBuffer];
 //hello from AgIO
 uint8_t helloFromMachine[] = { 128, 129, 123, 123, 5, 0, 0, 0, 0, 0, 71 };
 
-//speed sent as *10
-float gpsSpeed = 0, hertz = 0;
-uint16_t pulseBy100m = PULSE_BY_100M;
-
 //The variables used for storage
 uint8_t sectionLo = 0, sectionHi = 0, tramline = 0, hydLift = 0, geoStop = 0;
 uint8_t raiseTimer = 0, lowerTimer = 0, lastTrigger = 0;
@@ -80,6 +72,7 @@ uint8_t onLo = 0, offLo = 0, onHi = 0, offHi = 0, mainByte = 0;
 //End of variables
 
 #include "LedManager.h"
+#include "PulseGenrator.h"
 #include "WiFi_Config.h"
 
 void setup() {
@@ -89,7 +82,6 @@ void setup() {
   }
   pinMode(PinWiFiConnected, OUTPUT);
   pinMode(PinAogStatus, OUTPUT);
-  pinMode(PinOutputImpuls, OUTPUT);
   pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND
   pinMode(ManualSwitch, INPUT_PULLUP);
   pinMode(WorkWithoutAogSwitch, INPUT_PULLUP);
@@ -143,8 +135,8 @@ void setup() {
     delay(120);
   }
   #endif
-
-  //WiFi Setup
+  
+  setupPulseGenerator();
   setupWiFi();
 } //end of setup
 
@@ -159,7 +151,7 @@ void loop() {
     if (wifiResetTimer++ > 20) {
       while (udp.available() > 0) udp.read();
       wifiResetTimer = 0;
-      noTone(PinOutputImpuls);
+      updatePulseSpeed(0);
     }
     
     //avoid overflow of watchdogTimer:
@@ -256,7 +248,7 @@ void loop() {
       udp.beginPacket(udpAddress, udpPort);
       udp.write(AOG, sizeof(AOG));
       udp.endPacket();
-      udp.flush();
+      udp.clear();
     }
     //hydraulic lift
 
@@ -361,7 +353,7 @@ void loop() {
         udp.beginPacket(udpAddress, udpPort);
         udp.write(helloFromMachine, sizeof(helloFromMachine));
         udp.endPacket();
-        udp.flush();
+        udp.clear();
 
         if (statusLED != AOG_READY) statusLED = AOG_CONNECTED;
       }
@@ -407,15 +399,13 @@ void loop() {
           udp.beginPacket(ipDest, udpPort);
           udp.write(scanReply, sizeof(scanReply));
           udp.endPacket();
-          udp.flush();
+          udp.clear();
         }
       }
       else if (udpData[3] == 254)
       {
-        gpsSpeed = ((float)(udpData[5] | udpData[6] << 8 )); // = Vitesse * 10
-        hertz = (gpsSpeed * pulseBy100m) / 60 / 60; // = (pulsation par H) / min / s = Hertz
-        if (hertz > 39) tone(PinOutputImpuls, hertz);
-        else noTone(PinOutputImpuls);
+        float gpsSpeed = (udpData[5] | udpData[6] << 8 ); // = Speed * 10
+        updatePulseSpeed(gpsSpeed);
         
         //Reset WiFi Watchdog
         wifiResetTimer = 0;
