@@ -2,7 +2,7 @@
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.20
+#define VERSION 3.21
 
 //pins:
 #define NUM_OF_RELAYS 8 //8 relays
@@ -132,6 +132,7 @@ void setup() {
         functionState[count] =  true; //Section ON
       }
     }
+    setSection();
     delay(120);
   }
   #endif
