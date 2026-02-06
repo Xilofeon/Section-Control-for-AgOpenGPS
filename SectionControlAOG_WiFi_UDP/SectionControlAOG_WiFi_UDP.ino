@@ -1,18 +1,31 @@
-    /* 13/11/2025 - Daniel Desmartins
+    /* 31/01/2026 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.21
+#define VERSION 3.30
+#define BOARD_TYPE 1 //Type 1 = 8 relays, Type 2 = 4 relays, Type 3 = 2 relays, according to the boards
+//Board use https://fr.aliexpress.com/item/1005005848337178.html
 
 //pins:
-#define NUM_OF_RELAYS 8 //8 relays
 #define PinWiFiConnected 23 //Pin WiFI Conntected
 #define PinAogStatus 2 //Pin AOG Conntected
 #define AutoSwitch 34  //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                        //<-
 #define ManualSwitch 35 //Switch Mode Manual On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
 #define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
+
+#if BOARD_TYPE == 1
+#define NUM_OF_RELAYS 8
 const uint8_t relayPinArray[] = { 32, 33, 25, 26, 27, 14, 12, 13 };  //Pins for Relays
 const uint8_t switchPinArray[] = { 4, 16, 17, 5, 18, 19, 21, 22 }; //Pins, Switch activation sections
+#elif BOARD_TYPE == 2
+#define NUM_OF_RELAYS 4
+const uint8_t relayPinArray[] = { 32, 33, 25, 26 };  //Pins for Relays
+const uint8_t switchPinArray[] = { 16, 17, 18, 19 }; //Pins, Switch activation sections
+#elif BOARD_TYPE == 3
+#define NUM_OF_RELAYS 2
+const uint8_t relayPinArray[] = { 16, 17 };  //Pins for Relays
+const uint8_t switchPinArray[] = { 18, 19 }; //Pins, Switch activation sections
+#endif
 
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
