@@ -1,8 +1,8 @@
-    /* 31/01/2026 - Daniel Desmartins
+    /* 25/03/2026 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.30
+#define VERSION 3.31
 #define BOARD_TYPE 1 //Type 1 = 8 relays, Type 2 = 4 relays, Type 3 = 2 relays, according to the boards
 //Board use https://fr.aliexpress.com/item/1005005848337178.html
 
@@ -27,6 +27,8 @@ const uint8_t relayPinArray[] = { 16, 17 };  //Pins for Relays
 const uint8_t switchPinArray[] = { 18, 19 }; //Pins, Switch activation sections
 #endif
 
+//Option
+//#define REMOTE_ONLY //use, for only, to send information back to AOG without automatic interruption
 //#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
 
@@ -170,19 +172,21 @@ void loop() {
     
     //avoid overflow of watchdogTimer:
     if (watchdogTimer++ > 250) watchdogTimer = 12;
-        
-    if (watchdogTimer > 20) {
-      if (aogConnected && watchdogTimer > 60) {
-        aogConnected = false;
-        firstConnection = true;
-        statusLED = AOG_CONNECTED;
-      }
+    
+    if (aogConnected && watchdogTimer > 60) {
+      aogConnected = false;
+      firstConnection = true;
+      statusLED = AOG_CONNECTED;
     }
     
     //emergency off:
     if (watchdogTimer > 10) {
       switchRelaisOff(); //All relays off!
     } else {
+      #ifdef REMOTE_ONLY
+      firstConnection = false;
+      manualModeIsOn = true;
+      #else
       //check Switch if Auto/Manual:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
       if (autoModeIsOn) {
@@ -192,6 +196,7 @@ void loop() {
         manualModeIsOn = !digitalRead(ManualSwitch);
         if (!manualModeIsOn) firstConnection = false;
       }
+      #endif
       
       if (!autoModeIsOn) {
         if(manualModeIsOn && !firstConnection) { //Mode Manual
@@ -350,6 +355,7 @@ void loop() {
         if (!aogConnected) {
           statusLED = AOG_READY;
           aogConnected = true;
+          firstConnection = true;
         }
       }
       else if (udpData[3] == 200) // Hello from AgIO
