@@ -3,7 +3,7 @@
 
 #include "driver/ledc.h"
 
-#define LED_BRIGHTNESS_PERCENT 8  // LED intensity (1.00-100%)
+#define LED_BRIGHTNESS_PERCENT 8  // LED intensity (1.00-100%) //8% Default
 
 enum { NO_CONNECTED, WIFI_CONFIG, WIFI_CONNECTED, AOG_CONNECTED, AOG_READY };
 uint8_t statusLED = NO_CONNECTED;

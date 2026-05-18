@@ -1,18 +1,25 @@
-    /* 25/03/2026 - Daniel Desmartins
+    /* 25/04/2026 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.31
+#define VERSION 3.40
 #define BOARD_TYPE 1 //Type 1 = 8 relays, Type 2 = 4 relays, Type 3 = 2 relays, according to the boards
-//Board use https://fr.aliexpress.com/item/1005005848337178.html
+//Board use https://fr.aliexpress.com/item/1005007027676026.html
+//Board Type = 4 https://fr.aliexpress.com/item/1005009529679936.html
+
+//Option
+//#define REMOTE_ONLY //use, for only, to send information back to AOG without automatic interruption
+//#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
+bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
 
 //pins:
-#define PinWiFiConnected 23 //Pin WiFI Conntected
-#define PinAogStatus 2 //Pin AOG Conntected
+#define PinWiFiConnected 2 //Pin WiFI Conntected
+#define PinAogStatus 23  //Pin AOG Conntected
 #define AutoSwitch 34  //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                        //<-
 #define ManualSwitch 35 //Switch Mode Manual On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
 #define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 
+//Board Type
 #if BOARD_TYPE == 1
 #define NUM_OF_RELAYS 8
 const uint8_t relayPinArray[] = { 32, 33, 25, 26, 27, 14, 12, 13 };  //Pins for Relays
@@ -25,16 +32,16 @@ const uint8_t switchPinArray[] = { 16, 17, 18, 19 }; //Pins, Switch activation s
 #define NUM_OF_RELAYS 2
 const uint8_t relayPinArray[] = { 16, 17 };  //Pins for Relays
 const uint8_t switchPinArray[] = { 18, 19 }; //Pins, Switch activation sections
+#elif BOARD_TYPE == 4
+#define NUM_OF_RELAYS 4
+const uint8_t relayPinArray[] = { 15, 16, 25, 26 };   //Pins for Relays
+const uint8_t switchPinArray[] = { 32, 33, 14, 27 };  //Pins, Switch activation sections
+bool relayIsActive = LOW;                            //Replace HIGH with LOW if your relays don't work the way you want
 #endif
-
-//Option
-//#define REMOTE_ONLY //use, for only, to send information back to AOG without automatic interruption
-//#define WORK_WITHOUT_AOG //Allows to use the box without aog connected (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
-bool relayIsActive = HIGH; //Replace HIGH with LOW if your relays don't work the way you want
 
 #include <EEPROM.h>
 const uint16_t EEPROM_SIZE = 64;
-#define EEP_Ident 0x35A3
+#define EEP_Ident 0x36A3
 uint16_t EEread = 0;
 
 //Variables for config - 0 is false
@@ -96,6 +103,7 @@ void setup() {
     pinMode(relayPinArray[count], OUTPUT);
   }
   pinMode(PinWiFiConnected, OUTPUT);
+  analogWrite(PinWiFiConnected, 25);
   pinMode(PinAogStatus, OUTPUT);
   pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND
   pinMode(ManualSwitch, INPUT_PULLUP);
@@ -116,7 +124,7 @@ void setup() {
   Serial.print("Version : ");
   Serial.println(VERSION);
   
-  EEPROM.begin(EEPROM_SIZE + WIFI_EEPROM_SIZE);
+  EEPROM.begin(TOTAL_EEPROM_SIZE);
   EEPROM.get(0, EEread);              // read identifier
 
   if (EEread != EEP_Ident) {   // check on first start and write EEPROM
@@ -135,8 +143,6 @@ void setup() {
   
   if (aogConfig.isRelayActiveHigh) { relayIsActive = HIGH; }
 
-  xTaskCreate( taskLed, "LED Task", 1000, NULL, 1, NULL );
-
   #ifdef WORK_WITHOUT_AOG
   delay(5000);
   while (!analogRead(WorkWithoutAogSwitch)) {
@@ -152,8 +158,9 @@ void setup() {
   }
   #endif
   
-  setupPulseGenerator();
   setupWiFi();
+  xTaskCreate( taskLed, "LED Task", 2048, NULL, 1, NULL );
+  setupPulseGenerator();
 } //end of setup
 
 void loop() {
@@ -165,9 +172,11 @@ void loop() {
     
     //clean out WiFi buffer to prevent buffer overflow:
     if (wifiResetTimer++ > 20) {
-      while (udp.available() > 0) udp.read();
+      udp.clear();
       wifiResetTimer = 0;
       updatePulseSpeed(0);
+      if (statusLED > WIFI_CONNECTED)
+        statusLED = WIFI_CONNECTED;
     }
     
     //avoid overflow of watchdogTimer:
@@ -267,7 +276,6 @@ void loop() {
       udp.beginPacket(udpAddress, udpPort);
       udp.write(AOG, sizeof(AOG));
       udp.endPacket();
-      udp.clear();
     }
     //hydraulic lift
 
@@ -373,9 +381,11 @@ void loop() {
         udp.beginPacket(udpAddress, udpPort);
         udp.write(helloFromMachine, sizeof(helloFromMachine));
         udp.endPacket();
-        udp.clear();
 
         if (statusLED != AOG_READY) statusLED = AOG_CONNECTED;
+
+        //Reset WiFi Watchdog
+        wifiResetTimer = 0;
       }
       else if (udpData[3] == 201)
       {
@@ -419,7 +429,6 @@ void loop() {
           udp.beginPacket(ipDest, udpPort);
           udp.write(scanReply, sizeof(scanReply));
           udp.endPacket();
-          udp.clear();
         }
       }
       else if (udpData[3] == 254)
