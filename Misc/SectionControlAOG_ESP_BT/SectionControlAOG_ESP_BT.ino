@@ -1,7 +1,8 @@
-#define VERSION 1.42
-/*  29/01/2025 - Daniel Desmartins
+#define VERSION 1.50
+/*  12/06/2026 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS
- */
+ *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
+*/
 
 //pins:
 #define NUM_OF_RELAYS 7
@@ -12,7 +13,7 @@ const uint8_t relayPinArray[] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define ManuelSwitch 35 //Switch Mode Manuel On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.
 const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 22};
 //#define PinWorkWithoutAOG 15
-//define NO_REMOTE_MODE
+//#define NO_REMOTE_MODE
 
 //Options:
 bool relayIsActive = HIGH; //Replace LOW with HIGH if your relays don't work the way you want
@@ -73,8 +74,9 @@ bool workWithoutAog = false;
 bool initWorkWithoutAog = false;
 uint8_t countManuelMode = 0;
 uint32_t lastTimeManuelMode = loopTime;
-
 //End of variables
+
+#include "PulseGenrator.h"
 
 void setup() {
   for (count = 0; count < NUM_OF_RELAYS; count++) {
@@ -97,17 +99,20 @@ void setup() {
   
   delay(100); //wait for IO chips to get ready
   
-  Serial.begin(38400);  //set up communication
+  Serial.begin(115200);  //set up communication
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
-  Serial.println("");
+  Serial.println("\r\n.");
+  Serial.println(".\r\n");
   Serial.println("Firmware : SectionControl BT");
   Serial.print("Version : ");
   Serial.println(VERSION);
   #ifdef BT
   SerialBT.begin("SectionControl");
   #endif
+
+  setupPulseGenerator();
 } //end of setup
 
 void loop() {
@@ -122,6 +127,7 @@ void loop() {
     
     //clean out serial buffer to prevent buffer overflow:
     if (serialResetTimer++ > 20) {
+      updatePulseSpeed(0);
       while (SerialBT.available() > 0) SerialBT.read();
       serialResetTimer = 0;
     }
@@ -163,12 +169,28 @@ void loop() {
       helloCounter = 0;
     }
 
-    for (count = 0; count < NUM_OF_RELAYS; count++) {
-      if (count < 8) {
-        digitalWrite(relayPinArray[count], (bitRead(relayLo, count) == relayIsActive)); //Open or Close relayLo by AOG
+    if (!digitalRead(ManuelSwitch)) {
+      if (AOG[5] == 2) {
+        AOG[5] = (uint8_t)0;
+        AOG[10] = (uint8_t)0;
+        sendToAOG();
       }
+
+      for (count = 0; count < NUM_OF_RELAYS; count++) {
+        if (count < 8) {
+          digitalWrite(relayPinArray[count], (bitRead(relayLo, count) == relayIsActive)); //Open or Close relayLo by AOG
+        }
+      }
+    } else {
+      switchRelaisOff();
+
+      //Send to AOG All Off!
+      AOG[5] = (uint8_t)2;
+      AOG[10] = (uint8_t)255;
+      
+      sendToAOG();
     }
-    #else
+    #else // NO_REMOTE_MODE
     else {
       //check Switch if Auto/Manuel:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
@@ -224,16 +246,8 @@ void loop() {
       AOG[5] = (uint8_t)mainByte;
       AOG[9] = (uint8_t)onLo;
       AOG[10] = (uint8_t)offLo;
-      
-      //add the checksum
-      int16_t CK_A = 0;
-      for (uint8_t i = 2; i < sizeof(AOG)-1; i++)
-      {
-        CK_A = (CK_A + AOG[i]);
-      }
-      AOG[sizeof(AOG)-1] = CK_A;
-      
-      SerialBT.write(AOG, sizeof(AOG));
+
+      sendToAOG();
     }
     #endif
   }
@@ -331,6 +345,55 @@ void loop() {
       isHeaderFound = isPGNFound = false;
       pgn = dataLength = 0;
     }
+    else if (pgn == 202)
+    {
+      while (SerialBT.available() > 0) SerialBT.read();
+      uint8_t scanReply[] = { 128, 129, 123, 203, 7, 
+                    192, 168, 1, 123,
+                    192, 168, 1, 23 };
+      
+      //checksum
+      int16_t CK_A = 0;
+      for (uint8_t i = 2; i < sizeof(scanReply) - 1; i++)
+      {
+        CK_A = (CK_A + scanReply[i]);
+      }
+      scanReply[sizeof(scanReply) - 1] = CK_A;
+      
+      //off to AOG
+      delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
+      SerialBT.write(scanReply, sizeof(scanReply));
+      delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
+      
+      //reset for next pgn sentence
+      isHeaderFound = isPGNFound = false;
+      pgn = dataLength = 0;
+    }
+    else if (pgn == 254)
+    {
+      float gpsSpeed = ((float)(Serial.read() | Serial.read() << 8)); // = Speed * 10
+      updatePulseSpeed(gpsSpeed);
+
+      Serial.read();
+      Serial.read();
+      Serial.read();
+      Serial.read();
+      Serial.read();
+      Serial.read();
+
+      //Bit 13 CRC
+      Serial.read();
+      
+      //reset watchdog
+      watchdogTimer = 0;
+  
+      //Reset serial Watchdog
+      serialResetTimer = 0;
+
+      //reset for next pgn sentence
+      isHeaderFound = isPGNFound = false;
+      pgn=dataLength=0;      
+    }
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
       pgn=dataLength=0;
@@ -344,6 +407,18 @@ void switchRelaisOff() {  //that are the relais, switch all off
   }
   onLo = 0;
   offLo = 0b11111111;
+}
+
+void sendToAOG() {
+    //add the checksum
+  int16_t CK_A = 0;
+  for (uint8_t i = 2; i < sizeof(AOG)-1; i++)
+  {
+    CK_A = (CK_A + AOG[i]);
+  }
+  AOG[sizeof(AOG)-1] = CK_A;
+  
+  SerialBT.write(AOG, sizeof(AOG));
 }
 
 void whitoutAogMode() {
