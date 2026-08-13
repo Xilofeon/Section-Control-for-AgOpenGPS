@@ -30,9 +30,11 @@ void setupPulseGenerator() {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
   pulseTimer = timerBegin(1000000);
   timerAttachInterrupt(pulseTimer, &onPulseTimer);
+  timerStop(pulseTimer);
 #else
-  pulseTimer = timerBegin(2, 80, true);
+  pulseTimer = timerBegin(1, 80, true);
   timerAttachInterrupt(pulseTimer, &onPulseTimer, true);
+  timerAlarmDisable(pulseTimer);
 #endif
 }
 
@@ -42,7 +44,7 @@ void updatePulseSpeed(float speedKmh10) {
   if (speedKmh < SPEED_THRESHOLD) {
     if (isGenerating) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-      timerDetachInterrupt(pulseTimer);
+      timerStop(pulseTimer);
 #else
       timerAlarmDisable(pulseTimer);
 #endif
@@ -60,7 +62,7 @@ void updatePulseSpeed(float speedKmh10) {
 
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarm(pulseTimer, halfPeriodUs, true, 0);
-  if (!isGenerating) timerAttachInterrupt(pulseTimer, &onPulseTimer);
+  if (!isGenerating) timerStart(pulseTimer);
 #else
   timerAlarmWrite(pulseTimer, halfPeriodUs, true);
   if (!isGenerating) timerAlarmEnable(pulseTimer);

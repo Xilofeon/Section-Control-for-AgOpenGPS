@@ -1,8 +1,8 @@
-    /* 25/04/2026 - Daniel Desmartins
+   /* 13/08/2026 - Daniel Desmartins
     *  Connected to the Relay Port in AgOpenGPS
     *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
     */
-#define VERSION 3.40
+#define VERSION 3.41
 #define BOARD_TYPE 1 //Type 1 = 8 relays, Type 2 = 4 relays, Type 3 = 2 relays, according to the boards
 //Board use https://fr.aliexpress.com/item/1005007027676026.html
 //Board Type = 4 https://fr.aliexpress.com/item/1005009529679936.html

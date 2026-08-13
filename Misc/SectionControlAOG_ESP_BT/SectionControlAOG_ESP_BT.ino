@@ -1,26 +1,23 @@
-#define VERSION 1.50
-/*  12/06/2026 - Daniel Desmartins
+#define VERSION 1.60
+/*  13/08/2026 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS
  *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
-*/
+ */
 
 //pins:
-#define NUM_OF_RELAYS 7
-#define PinSC_Ready 23
-#define PinAogReady  2 //Pin AOG Conntected
+#define NUM_OF_RELAYS 8
+#define PinSC_Ready 2
+#define PinAogStatus 23  //Pin AOG Conntected
 const uint8_t relayPinArray[] = {32, 33, 25, 26, 27, 14, 12, 13};
-#define AutoSwitch 34   //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.
-#define ManuelSwitch 35 //Switch Mode Manuel On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.
+#define AutoSwitch 34  //Switch Mode Auto On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                        //<-
+#define ManualSwitch 35 //Switch Mode Manual On/Off //Warning!! external pullup! connected this pin to a 10Kohms resistor connected to 3.3v.                                                                      //<-
 const uint8_t switchPinArray[] = {4, 16, 17, 5, 18, 19, 21, 22};
-//#define PinWorkWithoutAOG 15
+#define WorkWithoutAogSwitch 0 //Switch for work without AOG (optional). For use, connect to GND within 5s after turning on the box, but must not be at GND when turning on! (the ESP will remain frozen in boot mode)
 //#define NO_REMOTE_MODE
 
 //Options:
 bool relayIsActive = HIGH; //Replace LOW with HIGH if your relays don't work the way you want
 bool readyIsActive = LOW;
-
-#define LED_RED_ON 138
-#define LED_GREEN_ON 1
 
 #define BT //comment to use a serial link
 #ifdef BT
@@ -53,53 +50,47 @@ uint8_t helloCounter = 0;
 
 uint8_t AOG[] = { 0x80, 0x81, 0x7B, 0xEA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
 
-uint8_t pwm_LED = 0;
-uint8_t LED_Increment = LED_RED_ON/10;
-
 //The variables used for storage
 uint8_t relayLo = 0, relayHi = 0;
 
 uint8_t count = 0;
 
 bool autoModeIsOn = false;
-bool manuelModeIsOn = false;
+bool manualModeIsOn = false;
 bool aogConnected = false;
 bool firstConnection = true;
 
 uint8_t onLo = 0, offLo = 0, mainByte = 0;
 
 //whitout AOG
-bool lastManuelMode = false;
+bool lastManualMode = false;
 bool workWithoutAog = false;
 bool initWorkWithoutAog = false;
-uint8_t countManuelMode = 0;
-uint32_t lastTimeManuelMode = loopTime;
+uint8_t countManualMode = 0;
+uint32_t lastTimeManualMode = loopTime;
 //End of variables
 
+#include "LedManager.h"
 #include "PulseGenrator.h"
 
 void setup() {
+  //Pin Initialization
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(relayPinArray[count], OUTPUT);
-  }  
-  pinMode(AutoSwitch, INPUT_PULLUP);
-  pinMode(ManuelSwitch, INPUT_PULLUP);
+  }
+  pinMode(PinSC_Ready, OUTPUT);
+  analogWrite(PinSC_Ready, 25);
+  pinMode(PinAogStatus, OUTPUT);
+  pinMode(AutoSwitch, INPUT_PULLUP);  //INPUT_PULLUP: no external Resistor to GND or to PINx is needed, PULLUP: HIGH state if Switch is open! Connect to GND
+  pinMode(ManualSwitch, INPUT_PULLUP);
+  pinMode(WorkWithoutAogSwitch, INPUT_PULLUP);
   for (count = 0; count < NUM_OF_RELAYS; count++) {
     pinMode(switchPinArray[count], INPUT_PULLUP);
   }
-  //pinMode(PinWorkWithoutAOG, INPUT);
-
-  ledcAttach(PinAogReady, 5000, 8);
-  ledcAttach(PinSC_Ready, 5000, 8);
   
-  switchRelaisOff();
+  switchRelaisOff(); //All relays off!
   
-  ledcWrite(PinAogReady, 0);
-  ledcWrite(PinSC_Ready, 0);
-  
-  delay(100); //wait for IO chips to get ready
-  
-  Serial.begin(115200);  //set up communication
+  Serial.begin(38400);  //set up communication
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
@@ -111,7 +102,8 @@ void setup() {
   #ifdef BT
   SerialBT.begin("SectionControl");
   #endif
-
+  
+  xTaskCreate( taskLed, "LED Task", 2048, NULL, 1, NULL );
   setupPulseGenerator();
 } //end of setup
 
@@ -121,35 +113,22 @@ void loop() {
     lastTime = currentTime;
 
     whitoutAogMode();
-    
-    //avoid overflow of watchdogTimer:
-    if (watchdogTimer++ > 250) watchdogTimer = 241;
-    
+        
     //clean out serial buffer to prevent buffer overflow:
     if (serialResetTimer++ > 20) {
       updatePulseSpeed(0);
       while (SerialBT.available() > 0) SerialBT.read();
       serialResetTimer = 0;
+      statusLED = NO_CONNECTED;
     }
     
-    if ((watchdogTimer > 20)) {
-      if (aogConnected) {
-        if (watchdogTimer > 60) {
-          aogConnected = false;
-          firstConnection = true;
-          ledcWrite(PinAogReady, 0);
-          ledcWrite(PinSC_Ready, 0);
-        }
-      } else {
-        if (watchdogTimer > 240) {
-          ledcWrite(PinAogReady, 0);
-          pwm_LED = 0;
-        } else {
-          pwm_LED += LED_Increment;
-          if (pwm_LED > LED_RED_ON) pwm_LED = 0;
-          ledcWrite(PinAogReady, pwm_LED);
-        }
-      }
+    //avoid overflow of watchdogTimer:
+    if (watchdogTimer++ > 250) watchdogTimer = 12;
+    
+    if (aogConnected && watchdogTimer > 60) {
+      aogConnected = false;
+      firstConnection = true;
+      statusLED = AOG_CONNECTED;
     }
     
     //emergency off:
@@ -163,16 +142,16 @@ void loop() {
       }
     }
     #ifdef NO_REMOTE_MODE
-    //show life in AgIO
-    if (++helloCounter > 10 && !helloUDP) {
-      SerialBT.write(helloAgIO, sizeof(helloAgIO));
-      helloCounter = 0;
-    }
+    else if (!digitalRead(ManualSwitch)) {
+      //show life in AgIO
+      if (++helloCounter > 10 && !helloUDP) {
+        SerialBT.write(helloAgIO, sizeof(helloAgIO));
+        helloCounter = 0;
+      }
 
-    if (!digitalRead(ManuelSwitch)) {
-      if (AOG[5] == 2) {
-        AOG[5] = (uint8_t)0;
-        AOG[10] = (uint8_t)0;
+      if (mainByte != 0) {
+        mainByte = 0;
+        offLo = 0;
         sendToAOG();
       }
 
@@ -183,27 +162,26 @@ void loop() {
       }
     } else {
       switchRelaisOff();
-
       //Send to AOG All Off!
-      AOG[5] = (uint8_t)2;
-      AOG[10] = (uint8_t)255;
-      
+      mainByte = 2;
+
       sendToAOG();
+      //if (helloUDP) delay(10);
     }
     #else // NO_REMOTE_MODE
     else {
-      //check Switch if Auto/Manuel:
+      //check Switch if Auto/Manual:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
       if (autoModeIsOn) {
         mainByte = 1;
       } else {
         mainByte = 2;
-        manuelModeIsOn = !digitalRead(ManuelSwitch);
-        if (!manuelModeIsOn) firstConnection = false;
+        manualModeIsOn = !digitalRead(ManualSwitch);
+        if (!manualModeIsOn) firstConnection = false;
       }
       
       if (!autoModeIsOn) {
-        if(manuelModeIsOn && !firstConnection) { //Mode Manuel
+        if(manualModeIsOn && !firstConnection) { //Mode Manual
           for (count = 0; count < NUM_OF_RELAYS; count++) {
             if (!digitalRead(switchPinArray[count])) { //Signal LOW ==> switch is closed
               if (count < 8) {
@@ -242,11 +220,6 @@ void loop() {
         mainByte = 2;
       }
       
-      //Send to AOG
-      AOG[5] = (uint8_t)mainByte;
-      AOG[9] = (uint8_t)onLo;
-      AOG[10] = (uint8_t)offLo;
-
       sendToAOG();
     }
     #endif
@@ -278,8 +251,8 @@ void loop() {
     isPGNFound = true;
     
     if (!aogConnected) {
+      statusLED = AOG_CONNECTED;
       watchdogTimer = 12;
-      ledcWrite(PinAogReady, LED_RED_ON);
     }
   }
   
@@ -312,10 +285,10 @@ void loop() {
       pgn=dataLength=0;
       
       if (!aogConnected) {
-        ledcWrite(PinSC_Ready, LED_GREEN_ON);
-        aogConnected = true;
-        pwm_LED = 0;
+          aogConnected = true;
+          firstConnection = true;
       }
+      statusLED = AOG_READY;
     }
     else if (pgn == 200) // Hello from AgIO
     {
@@ -340,6 +313,8 @@ void loop() {
       delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
       SerialBT.write(helloFromMachine, sizeof(helloFromMachine));
       delay(10); //delay for USR modules which can be grouped into packages (readable for AGIO)
+      
+      if (statusLED != AOG_READY) statusLED = AOG_CONNECTED;
       
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
@@ -383,20 +358,17 @@ void loop() {
 
       //Bit 13 CRC
       Serial.read();
-      
-      //reset watchdog
-      watchdogTimer = 0;
-  
+        
       //Reset serial Watchdog
       serialResetTimer = 0;
 
       //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
-      pgn=dataLength=0;      
+      pgn = dataLength = 0;      
     }
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
-      pgn=dataLength=0;
+      pgn = dataLength = 0;
     }
   }
 } //end of main loop
@@ -410,7 +382,11 @@ void switchRelaisOff() {  //that are the relais, switch all off
 }
 
 void sendToAOG() {
-    //add the checksum
+  AOG[5] = (uint8_t)mainByte;
+  AOG[9] = (uint8_t)onLo;
+  AOG[10] = (uint8_t)offLo;
+
+  //add the checksum
   int16_t CK_A = 0;
   for (uint8_t i = 2; i < sizeof(AOG)-1; i++)
   {
@@ -424,42 +400,42 @@ void sendToAOG() {
 void whitoutAogMode() {
   if (Serial.available()) {
     initWorkWithoutAog = false;
-    countManuelMode = 0;
+    countManualMode = 0;
     return;
   }
 
-  manuelModeIsOn = digitalRead(ManuelSwitch);
-  if (manuelModeIsOn == HIGH && lastManuelMode == LOW)
+  manualModeIsOn = digitalRead(ManualSwitch);
+  if (manualModeIsOn == HIGH && lastManualMode == LOW)
   {
-    if (lastTimeManuelMode < currentTime + 5000) {
-      if (countManuelMode++ > 4) {
+    if (lastTimeManualMode < currentTime + 5000) {
+      if (countManualMode++ > 4) {
         initWorkWithoutAog = true;
         watchdogTimer = 12;
       }
     } else {
-      countManuelMode = 0;
+      countManualMode = 0;
       initWorkWithoutAog = false;
-      lastTimeManuelMode = currentTime;
+      lastTimeManualMode = currentTime;
     }
   }
-  lastManuelMode = manuelModeIsOn;
+  lastManualMode = manualModeIsOn;
   
   if (initWorkWithoutAog/* || !digitalRead(PinWorkWithoutAOG)*/) {
-    if (!(watchdogTimer % 6)) digitalWrite(PinAogReady, !digitalRead(PinAogReady));
+    if (!(watchdogTimer % 6)) digitalWrite(PinAogStatus, !digitalRead(PinAogStatus));
     if (!(watchdogTimer % 8)) digitalWrite(PinSC_Ready, !digitalRead(PinSC_Ready));
     
     if (watchdogTimer > 100) {
       initWorkWithoutAog = false;
       workWithoutAog = true;
-      countManuelMode = 0;
+      countManualMode = 0;
       digitalWrite(PinSC_Ready, !readyIsActive);
-      digitalWrite(PinAogReady, readyIsActive);
+      digitalWrite(PinAogStatus, readyIsActive);
     }
   }
   
   while (workWithoutAog) {
     for (count = 0; count < NUM_OF_RELAYS; count++) {
-      if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManuelSwitch))) {
+      if (digitalRead(switchPinArray[count]) || (digitalRead(AutoSwitch) && digitalRead(ManualSwitch))) {
         digitalWrite(relayPinArray[count], !relayIsActive); //Relay OFF
       } else {
         digitalWrite(relayPinArray[count], relayIsActive); //Relay ON
@@ -468,7 +444,7 @@ void whitoutAogMode() {
     delay(100);
     if (Serial.available()) {
       workWithoutAog = false;
-      digitalWrite(PinAogReady, !readyIsActive);
+      digitalWrite(PinAogStatus, !readyIsActive);
     }
   }
 }
