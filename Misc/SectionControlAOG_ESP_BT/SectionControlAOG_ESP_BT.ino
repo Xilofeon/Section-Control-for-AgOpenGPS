@@ -1,5 +1,5 @@
-#define VERSION 1.60
-/*  13/08/2026 - Daniel Desmartins
+#define VERSION 1.61
+/*  29/08/2026 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS
  *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
  */
@@ -113,7 +113,7 @@ void loop() {
     lastTime = currentTime;
 
     whitoutAogMode();
-        
+    
     //clean out serial buffer to prevent buffer overflow:
     if (serialResetTimer++ > 20) {
       updatePulseSpeed(0);
@@ -141,34 +141,42 @@ void loop() {
         helloCounter = 0;
       }
     }
+
     #ifdef NO_REMOTE_MODE
-    else if (!digitalRead(ManualSwitch)) {
-      //show life in AgIO
-      if (++helloCounter > 10 && !helloUDP) {
-        SerialBT.write(helloAgIO, sizeof(helloAgIO));
-        helloCounter = 0;
-      }
-
-      if (mainByte != 0) {
-        mainByte = 0;
-        offLo = 0;
-        sendToAOG();
-      }
-
-      for (count = 0; count < NUM_OF_RELAYS; count++) {
-        if (count < 8) {
-          digitalWrite(relayPinArray[count], (bitRead(relayLo, count) == relayIsActive)); //Open or Close relayLo by AOG
+    else {
+      manualModeIsOn = !digitalRead(ManualSwitch);
+      if (!manualModeIsOn) firstConnection = false;
+      
+      if (manualModeIsOn && !firstConnection) {
+        //show life in AgIO
+        if (++helloCounter > 10 && !helloUDP) {
+          SerialBT.write(helloAgIO, sizeof(helloAgIO));
+          helloCounter = 0;
         }
-      }
-    } else {
-      switchRelaisOff();
-      //Send to AOG All Off!
-      mainByte = 2;
 
-      sendToAOG();
-      //if (helloUDP) delay(10);
+        if (mainByte != 0) {
+          if (mainByte == 2) mainByte = 1; //Auto ON in AOG
+          else mainByte = 0;
+          offLo = 0;
+          sendToAOG();
+        }
+
+        for (count = 0; count < NUM_OF_RELAYS; count++) {
+          if (count < 8) {
+            digitalWrite(relayPinArray[count], (bitRead(relayLo, count) == relayIsActive)); //Open or Close relayLo by AOG
+          }
+        }
+      } else {
+        switchRelaisOff();
+        //Send to AOG All Off!
+        mainByte = 2;
+
+        sendToAOG();
+        //if (helloUDP) delay(10);
+      }
     }
     #else // NO_REMOTE_MODE
+
     else {
       //check Switch if Auto/Manual:
       autoModeIsOn = !digitalRead(AutoSwitch); //Switch has to close for autoModeOn, Switch closes ==> LOW state ==> ! makes it to true
