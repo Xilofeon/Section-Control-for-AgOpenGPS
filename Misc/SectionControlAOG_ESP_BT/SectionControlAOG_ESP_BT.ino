@@ -1,5 +1,5 @@
-#define VERSION 1.61
-/*  29/08/2026 - Daniel Desmartins
+#define VERSION 1.62
+/*  08/10/2026 - Daniel Desmartins
  *  Connected to the Relay Port in AgOpenGPS
  *  If you find any mistakes or have an idea to improove the code, feel free to contact me. N'hésitez pas à me contacter en cas de problème ou si vous avez une idée d'amélioration.
  */
@@ -23,8 +23,10 @@ bool readyIsActive = LOW;
 #ifdef BT
 #include "BluetoothSerial.h"
 BluetoothSerial SerialBT;
+const int baud = 38400;
 #else
 #define SerialBT Serial
+const int baud = 115200;
 #endif //BT
 
 //Variables:
@@ -89,8 +91,9 @@ void setup() {
   }
   
   switchRelaisOff(); //All relays off!
+  delay(200);
   
-  Serial.begin(38400);  //set up communication
+  Serial.begin(baud);  //set up communication
   while (!Serial) {
     // wait for serial port to connect. Needed for native USB
   }
@@ -159,6 +162,7 @@ void loop() {
           else mainByte = 0;
           offLo = 0;
           sendToAOG();
+          if (helloUDP) delay(10);
         }
 
         for (count = 0; count < NUM_OF_RELAYS; count++) {
@@ -172,7 +176,7 @@ void loop() {
         mainByte = 2;
 
         sendToAOG();
-        //if (helloUDP) delay(10);
+        if (helloUDP) delay(10);
       }
     }
     #else // NO_REMOTE_MODE
@@ -377,6 +381,9 @@ void loop() {
     else { //reset for next pgn sentence
       isHeaderFound = isPGNFound = false;
       pgn = dataLength = 0;
+      if (helloUDP) {
+        while (Serial.available()) { Serial.read(); }
+      }
     }
   }
 } //end of main loop
